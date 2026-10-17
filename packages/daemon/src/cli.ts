@@ -50,6 +50,7 @@ async function runtime(config: Config) {
     mirror,
     extractor: () => extractor,
     trajectory,
+    hasPlanDocs: (projectId) => engine.hasPlanDocs(projectId),
     onProjectActivity: (projectId) => void engine.sync(projectId),
   });
   const setApiKey = async (key: string | null) => {

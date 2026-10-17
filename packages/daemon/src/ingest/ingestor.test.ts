@@ -15,7 +15,7 @@ class FakeExtractor implements Extractor {
   async extract(input: ExtractInput): Promise<CandidateBatch> {
     this.calls.push(input);
     const pick = input.newTurns.find((t) => t.text.includes("use SQLite"));
-    if (!pick) return { entries: [], progress: [] };
+    if (!pick) return { entries: [], progress: [], newPlan: null };
     return {
       entries: [
         {
@@ -32,6 +32,7 @@ class FakeExtractor implements Extractor {
         },
       ],
       progress: [],
+      newPlan: null,
     };
   }
 }

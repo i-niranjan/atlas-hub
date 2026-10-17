@@ -5,8 +5,8 @@ import type { NodeState, TrackState, TrajectoryState } from "@atlas/core";
  * then current and planned work in plan order. Each track gets a lane; a track
  * that replaced another forks down from where the old one stopped.
  *
- * Positions are computed from the *latest* state so Replay never moves things:
- * at an earlier time, nodes only appear, fill or fade in place.
+ * Positions are computed from the *latest* state, so live updates never move
+ * things: nodes only appear, fill or fade in place.
  */
 
 export const LANE_GAP = 92;

@@ -161,6 +161,18 @@ export class PlanEngine {
     }).then(() => this.deps.store.getProject(intoId));
   }
 
+  /** Does the project keep plan documents (or approved Claude plans) that define its roadmap? */
+  hasPlanDocs(projectId: string): boolean {
+    const { store } = this.deps;
+    const project = store.getProject(projectId);
+    if (!project) return false;
+    const roots = store
+      .rootsOf(projectId)
+      .map((r) => r.path)
+      .filter(existsSync);
+    return collectDocs(roots, project, store.listProjects(), this.deps.plansDir).length > 0;
+  }
+
   /** Rebuild a project's roadmap from scratch (after extraction logic changes). Session-reported progress is lost. */
   rebuild(projectId: string): Promise<void> {
     return this.run(async () => {

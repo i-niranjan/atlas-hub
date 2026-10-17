@@ -1,5 +1,5 @@
 import { heading, projectAt, type NodeStatus, type TrajectoryData } from "@atlas/core";
-import type { ProgressItem } from "../extract/schema.ts";
+import type { NewPlan, ProgressItem } from "../extract/schema.ts";
 import { verifyEvidence } from "../extract/verify.ts";
 import type { Turn } from "../ingest/transcript.ts";
 import { advances } from "./reconcile.ts";
@@ -41,6 +41,8 @@ export interface ProgressContext {
   projectId: string;
   /** Every project whose roadmap the model was shown; status changes may touch any of them. */
   projectIds?: string[];
+  /** Projects without plan docs, whose roadmap sessions maintain (they may add whole milestones). */
+  sessionManaged?: Set<string>;
   sessionId: string;
   newTurns: Turn[];
   now: string;
@@ -101,6 +103,32 @@ export function applyProgress(
     const data = store.data(projectId);
     const h = heading(projectAt(data, ctx.now));
     if (!h.track) continue;
+
+    if (item.action === "added" && item.kind === "milestone") {
+      // Whole new phases only come from sessions while no plan docs define the roadmap.
+      if (!ctx.sessionManaged?.has(projectId)) {
+        log(`milestone "${item.title}" skipped: this project's plan lives in its docs`);
+        continue;
+      }
+      const onTrack = data.nodes.filter((n) => n.trackId === h.track!.id);
+      const nodeId = store.createNode({
+        projectId,
+        trackId: h.track.id,
+        kind: "milestone",
+        key: null,
+        title: item.title.trim().slice(0, 120),
+        parentId: null,
+        sort: Math.max(0, ...onTrack.map((n) => n.sort)) + 1,
+        reviewState: sure ? "confirmed" : "needs_review",
+        source: "session",
+        at,
+        status: "planned",
+      });
+      cite(nodeId);
+      changed.add(projectId);
+      changes++;
+      continue;
+    }
 
     if (item.action === "added") {
       const parent = item.milestoneId ? store.node(item.milestoneId) : null;
@@ -173,4 +201,91 @@ export function applyProgress(
     }
   }
   return { changes, projects: [...changed] };
+}
+
+/**
+ * Start a roadmap from a plan agreed in a session, for a project with no plan
+ * docs. Returns the new track id, or null when the plan isn't backed by the turns.
+ */
+export function applySessionPlan(
+  plan: NewPlan,
+  ctx: { store: TrajectoryStore; projectId: string; sessionId: string; newTurns: Turn[] },
+  log: (m: string) => void = () => undefined,
+): string | null {
+  const { store, projectId } = ctx;
+  if (store.hasTrajectory(projectId)) return null;
+  const goalEvidence = verifyEvidence(plan.evidence, ctx.newTurns, ctx.sessionId);
+  const milestones = plan.milestones
+    .map((m) => ({ ...m, verified: verifyEvidence(m.evidence, ctx.newTurns, ctx.sessionId) }))
+    .filter((m) => m.verified.length > 0 && m.title.trim());
+  const all = [...goalEvidence, ...milestones.flatMap((m) => m.verified)];
+  if (milestones.length < 1 || !all.length) {
+    log(`session plan "${plan.direction}" skipped: no milestone backed by a quote`);
+    return null;
+  }
+  const at = all.map((e) => e.timestamp).sort()[0]!;
+  // Agreed plans are confirmed; brainstorming that hasn't settled is drawn as unconfirmed.
+  const sure = all.some((e) => e.role !== "assistant") && plan.confidence >= 0.8;
+  const review = sure ? "confirmed" : "needs_review";
+  const cite = (id: string, evs: typeof all) => {
+    for (const e of evs)
+      store.addEvidence(id, { kind: "quote", ref: e.sessionId, excerpt: e.quote, at: e.timestamp });
+  };
+
+  const trackId = store.createTrack({
+    projectId,
+    name: plan.direction.trim().slice(0, 80) || "Plan",
+    at,
+    source: "session",
+  });
+  cite(trackId, goalEvidence.length ? goalEvidence : all.slice(0, 1));
+  let sort = 0;
+  const goalId = store.createNode({
+    projectId,
+    trackId,
+    kind: "goal",
+    key: null,
+    title: plan.goal.trim().slice(0, 120) || plan.direction,
+    parentId: null,
+    sort: sort++,
+    reviewState: review,
+    source: "session",
+    at,
+    status: "planned",
+  });
+  cite(goalId, goalEvidence.length ? goalEvidence : all.slice(0, 1));
+  for (const m of milestones) {
+    const mAt = m.verified.map((e) => e.timestamp).sort()[0]!;
+    const mid = store.createNode({
+      projectId,
+      trackId,
+      kind: "milestone",
+      key: m.key?.trim() || null,
+      title: m.title.trim().slice(0, 120),
+      parentId: null,
+      sort: sort++,
+      reviewState: review,
+      source: "session",
+      at: mAt,
+      status: m.status,
+    });
+    cite(mid, m.verified);
+    for (const st of m.stories) {
+      if (!st.title.trim()) continue;
+      store.createNode({
+        projectId,
+        trackId,
+        kind: "story",
+        key: st.key?.trim() || null,
+        title: st.title.trim().slice(0, 120),
+        parentId: mid,
+        sort: sort++,
+        reviewState: review,
+        source: "session",
+        at: mAt,
+        status: st.status,
+      });
+    }
+  }
+  return trackId;
 }

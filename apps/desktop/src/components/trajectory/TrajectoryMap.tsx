@@ -24,7 +24,7 @@ export const STATUS_LABEL: Record<NodeStatus, string> = {
 
 interface Props {
   data: TrajectoryData;
-  /** Moment to show (Replay); the layout is always from the latest state. */
+  /** Moment to show; the layout is always from the latest state. */
   at: string;
   decisions?: Entry[];
   selectedId?: string | null;

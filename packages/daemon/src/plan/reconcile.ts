@@ -32,6 +32,14 @@ function validDate(s: string | null | undefined, fallback: string, now: string):
   return iso > now ? fallback : iso;
 }
 
+/** The project's one active track, if everything on it came from sessions. */
+function sessionOnlyTrack(data: ReturnType<TrajectoryStore["data"]>) {
+  const tracks = data.tracks.filter(
+    (t) => !data.nodes.some((n) => n.trackId === t.id && n.source !== "session"),
+  );
+  return data.tracks.length === 1 && tracks.length === 1 ? tracks[0] : undefined;
+}
+
 /** Apply a document extraction to a project's trajectory. Only appends events. */
 export function applyPlan(
   x: PlanExtraction,
@@ -66,7 +74,15 @@ export function applyPlan(
       result.rejected.push({ title: t.name, reason: "track quote not found in document" });
       continue;
     }
-    const match = existing.tracks.find((e) => normTitle(e.name) === normTitle(t.name));
+    // When plan docs first appear, they take over the line sessions started instead of adding a second one.
+    const match =
+      existing.tracks.find((e) => normTitle(e.name) === normTitle(t.name)) ??
+      (t.status === "active" && x.tracks.filter((o) => o.status === "active").length === 1
+        ? sessionOnlyTrack(existing)
+        : undefined);
+    if (match && sessionOnlyTrack(existing)?.id === match.id && match.name !== t.name) {
+      store.updateTrack(match.id, { name: t.name });
+    }
     // A track begins when its earliest item appeared, not when some later doc mentioned it.
     const itemDates = x.nodes
       .filter((n) => n.trackRef === t.ref && quoteOk(n.evidence))

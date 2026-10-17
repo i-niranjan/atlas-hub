@@ -238,13 +238,21 @@ export class TrajectoryStore {
 
   updateTrack(
     trackId: string,
-    patch: { parentTrackId?: string | null; forkNodeId?: string | null; reason?: string | null },
+    patch: {
+      name?: string;
+      parentTrackId?: string | null;
+      forkNodeId?: string | null;
+      reason?: string | null;
+    },
   ): void {
     const cur = this.track(trackId);
     if (!cur) return;
     this.db
-      .prepare(`UPDATE tracks SET parent_track_id = ?, fork_node_id = ?, reason = ? WHERE id = ?`)
+      .prepare(
+        `UPDATE tracks SET name = ?, parent_track_id = ?, fork_node_id = ?, reason = ? WHERE id = ?`,
+      )
       .run(
+        patch.name ?? cur.name,
         patch.parentTrackId !== undefined ? patch.parentTrackId : cur.parentTrackId,
         patch.forkNodeId !== undefined ? patch.forkNodeId : cur.forkNodeId,
         patch.reason !== undefined ? patch.reason : cur.reason,

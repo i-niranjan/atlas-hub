@@ -8,7 +8,7 @@ import type { Config } from "../config.ts";
 import type { Extractor } from "../extract/llm.ts";
 import { reconcile } from "../extract/reconcile.ts";
 import type { Mirror } from "../mirror.ts";
-import { applyProgress, renderTrajectory } from "../plan/session.ts";
+import { applyProgress, applySessionPlan, renderTrajectory } from "../plan/session.ts";
 import type { TrajectoryStore } from "../plan/store.ts";
 import type { Store } from "../store.ts";
 import { isDirectory, resolveProject } from "./project.ts";
@@ -35,6 +35,8 @@ export interface IngestorDeps {
   extractor: () => Extractor | null;
   /** Module 2: when present, sessions also move the project's trajectory. */
   trajectory?: TrajectoryStore;
+  /** Whether a project has plan documents (then its docs, not sessions, define its roadmap). */
+  hasPlanDocs?: (projectId: string) => boolean;
   /** Called after a session is processed, e.g. to re-check the project's git history. */
   onProjectActivity?: (projectId: string) => void;
   log?: (msg: string) => void;
@@ -183,14 +185,25 @@ export class Ingestor {
         const withRoadmap = tstore
           ? mentioned.filter((p) => tstore.hasTrajectory(p.id)).slice(0, 3)
           : [];
+        const hasDocs = (id: string) => this.deps.hasPlanDocs?.(id) ?? true;
+        const sessionManaged = new Set(withRoadmap.filter((p) => !hasDocs(p.id)).map((p) => p.id));
         const trajectory = withRoadmap.length
           ? withRoadmap
               .map(
                 (p) =>
-                  `## ${p.name} (${p.rootPath})\n${renderTrajectory(tstore!.data(p.id), this.now) ?? ""}`,
+                  `## ${p.name} (${p.rootPath})${sessionManaged.has(p.id) ? ' managed_by="sessions"' : ""}\n${renderTrajectory(tstore!.data(p.id), this.now) ?? ""}`,
               )
               .join("\n\n")
           : undefined;
+        // A session may start a roadmap only for its own project, only when that project has
+        // neither a roadmap nor plan docs, and not when the turns are about another known project.
+        const aboutOtherProject = mentioned.some((p) => p.id !== project.id);
+        const noRoadmap =
+          !!tstore &&
+          !!this.deps.hasPlanDocs &&
+          !tstore.hasTrajectory(project.id) &&
+          !hasDocs(project.id) &&
+          !aboutOtherProject;
         const batch = await extractor.extract({
           sessionProject: project,
           knownProjects,
@@ -198,7 +211,21 @@ export class Ingestor {
           contextTurns: redacted.slice(Math.max(0, processed - CONTEXT_TURNS), processed),
           newTurns: chunk,
           ...(trajectory ? { trajectory } : {}),
+          ...(noRoadmap ? { noRoadmap } : {}),
         });
+        if (tstore && noRoadmap && batch.newPlan) {
+          const started = store.db.transaction(() =>
+            applySessionPlan(
+              batch.newPlan!,
+              { store: tstore, projectId: project.id, sessionId, newTurns: chunk },
+              (m) => this.log(m),
+            ),
+          )();
+          if (started) {
+            this.log(`trajectory: started a roadmap for ${project.name} from a session`);
+            bus.emit({ type: "trajectory.changed", projectId: project.id });
+          }
+        }
         if (tstore && trajectory && batch.progress.length) {
           const moved = store.db.transaction(() =>
             applyProgress(
@@ -207,6 +234,7 @@ export class Ingestor {
                 store: tstore,
                 projectId: project.id,
                 projectIds: withRoadmap.map((p) => p.id),
+                sessionManaged,
                 sessionId,
                 newTurns: chunk,
                 now: this.now,

@@ -303,35 +303,3 @@ textarea:focus-visible {
   opacity: 1;
   border-radius: 4px;
 }
-
-/* Replay scrubber: a macOS-style slider with the elapsed part in the accent colour. */
-.replay-range {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 20px;
-  background: transparent;
-}
-.replay-range::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(to right, var(--accent) 0 var(--pct), var(--fill-2) var(--pct) 100%);
-}
-.replay-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  margin-top: -6px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow:
-    0 0 0 0.5px rgb(0 0 0 / 0.25),
-    0 1px 3px rgb(0 0 0 / 0.3);
-}
-.replay-range:focus-visible {
-  outline: none;
-}
-.replay-range:focus-visible::-webkit-slider-thumb {
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent),
-    0 1px 3px rgb(0 0 0 / 0.3);
-}

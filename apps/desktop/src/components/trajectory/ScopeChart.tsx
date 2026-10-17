@@ -6,20 +6,9 @@ import { shortDate } from "../../lib/format.ts";
 
 /**
  * Planned work over time: the light area is everything in scope, the accent
- * area what's done. Markers show where scope grew or shrank; clicking one
- * jumps Replay there.
+ * area what's done. Markers show where scope grew or shrank.
  */
-export function ScopeChart({
-  data,
-  at,
-  onSeek,
-  height = 92,
-}: {
-  data: TrajectoryData;
-  at?: string;
-  onSeek?: (iso: string) => void;
-  height?: number;
-}) {
+export function ScopeChart({ data, height = 92 }: { data: TrajectoryData; height?: number }) {
   const box = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(600);
   useLayoutEffect(() => {
@@ -81,11 +70,7 @@ export function ScopeChart({
           const cx = x(p.at);
           const cy = y(p.total) - 7;
           return (
-            <g
-              key={p.at}
-              style={{ cursor: onSeek ? "pointer" : "default" }}
-              onClick={() => onSeek?.(p.at)}
-            >
+            <g key={p.at}>
               <title>
                 {`${shortDate(p.at)}: scope ${grew ? "grew" : "shrank"} by ${Math.abs(p.delta)} (now ${p.total})`}
               </title>
@@ -101,16 +86,6 @@ export function ScopeChart({
             </g>
           );
         })}
-        {at && at < now && (
-          <line
-            x1={x(at)}
-            x2={x(at)}
-            y1={pad.t - 6}
-            y2={y(0)}
-            stroke="var(--accent)"
-            strokeWidth={1.5}
-          />
-        )}
         <text x={pad.l} y={height - 4} className="t-caption" fill="var(--label-3)">
           {shortDate(series[0]!.at)}
         </text>

@@ -1,12 +1,11 @@
 import type { Entry } from "@atlas/core";
-import { heading, projectAt, timeRange } from "@atlas/core";
+import { heading, projectAt } from "@atlas/core";
 import { Map as MapIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTrajectory } from "../../lib/queries.ts";
 import { EmptyState, SkeletonRows } from "../ui.tsx";
 import { HeadingCard } from "./Heading.tsx";
 import { NodeDetail } from "./NodeDetail.tsx";
-import { Replay, type Speed } from "./Replay.tsx";
 import { ScopeChart } from "./ScopeChart.tsx";
 import { TrajectoryMap } from "./TrajectoryMap.tsx";
 
@@ -25,16 +24,9 @@ export function Trajectory({
   onSelectNode: (id: string | null) => void;
 }) {
   const { data, isLoading } = useTrajectory(projectId);
-  const [at, setAt] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState<Speed>("4");
-
-  // "Now" is fixed per data version so Replay has a stable end while it plays.
   const now = useMemo(() => new Date().toISOString(), [data]);
-  const shownAt = at ?? now;
-  const state = useMemo(() => (data ? projectAt(data, shownAt) : null), [data, shownAt]);
+  const state = useMemo(() => (data ? projectAt(data, now) : null), [data, now]);
   const h = useMemo(() => (state ? heading(state) : null), [state]);
-  const range = data ? timeRange(data) : null;
 
   if (isLoading) {
     return (
@@ -43,12 +35,12 @@ export function Trajectory({
       </div>
     );
   }
-  if (!data || !data.tracks.length || !state || !h || !range) {
+  if (!data || !data.tracks.length || !state || !h) {
     return (
       <EmptyState
         icon={MapIcon}
         title="No roadmap yet"
-        message="Atlas draws this from the project's plan documents (roadmaps, scope docs, backlogs, approved Claude plans) and keeps it moving as sessions and commits land."
+        message="Atlas starts one when the project has plan documents (roadmaps, scope docs, backlogs, approved Claude plans), or when a Claude session plans or builds this project. It keeps moving as sessions and commits land."
       />
     );
   }
@@ -66,21 +58,11 @@ export function Trajectory({
           >
             <TrajectoryMap
               data={data}
-              at={shownAt}
+              at={now}
               decisions={decisions}
               selectedId={selectedNodeId}
               onSelectNode={(id) => onSelectNode(id)}
               onOpenEntry={onOpenEntry}
-            />
-            <Replay
-              start={range.start}
-              end={now}
-              at={at}
-              onChange={setAt}
-              playing={playing}
-              onPlayingChange={setPlaying}
-              speed={speed}
-              onSpeedChange={setSpeed}
             />
           </section>
 
@@ -92,17 +74,10 @@ export function Trajectory({
             <div className="t-section mb-1 flex items-center justify-between">
               <span>Scope over time</span>
               <span className="t-caption font-normal" style={{ color: "var(--label-3)" }}>
-                ▲ grew · ▼ cut · click to replay from there
+                ▲ grew · ▼ cut
               </span>
             </div>
-            <ScopeChart
-              data={data}
-              at={shownAt}
-              onSeek={(iso) => {
-                setPlaying(false);
-                setAt(iso);
-              }}
-            />
+            <ScopeChart data={data} />
           </section>
         </div>
       </div>

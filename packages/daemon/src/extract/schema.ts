@@ -24,14 +24,44 @@ export const ProgressItem = z.object({
   title: z.string(),
   /** For "added": the milestone it belongs to, if any. */
   milestoneId: z.string().nullable(),
+  /** For "added": a whole new milestone (only on session-managed roadmaps) or a story. */
+  kind: z.enum(["story", "milestone"]).nullable(),
   reason: z.string().nullable(),
   confidence: z.number(),
   evidence: z.array(z.object({ turnUuid: z.string(), quote: z.string() })),
 });
 export type ProgressItem = z.infer<typeof ProgressItem>;
 
+const Quote = z.object({ turnUuid: z.string(), quote: z.string() });
+
+/** A roadmap laid out in a session, for a project that has no plan documents. */
+export const NewPlan = z.object({
+  direction: z.string(),
+  goal: z.string(),
+  confidence: z.number(),
+  evidence: z.array(Quote),
+  milestones: z.array(
+    z.object({
+      title: z.string(),
+      key: z.string().nullable(),
+      status: z.enum(["planned", "in_progress", "done"]),
+      evidence: z.array(Quote),
+      stories: z.array(
+        z.object({
+          title: z.string(),
+          key: z.string().nullable(),
+          status: z.enum(["planned", "in_progress", "done"]),
+        }),
+      ),
+    }),
+  ),
+});
+export type NewPlan = z.infer<typeof NewPlan>;
+
 export const CandidateBatch = z.object({
   entries: z.array(Candidate),
   progress: z.array(ProgressItem),
+  /** Only when <no_roadmap> was given and the turns lay out an agreed plan. */
+  newPlan: NewPlan.nullable(),
 });
 export type CandidateBatch = z.infer<typeof CandidateBatch>;

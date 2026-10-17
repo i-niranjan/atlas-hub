@@ -58,9 +58,15 @@ If the new turns contain no decisions, return an empty list. That is the common 
 
 <trajectory> lists the project's planned goal, milestones and stories with ids and status. Report movement on it that the new turns show:
 - started / done / dropped / blocked: an existing node (nodeId) whose work clearly began, was finished (implemented and verified, not merely discussed), was cut from scope, or is blocked.
-- added: new work the developer brought into scope (title; milestoneId when it clearly belongs to one).
+- added: new work the developer brought into scope (title; milestoneId when it clearly belongs to one; kind "story"). On a roadmap marked managed_by="sessions" you may also add a whole new phase with kind "milestone".
 - pivot: the developer changed the project's direction so the current plan no longer applies (title = the new direction, reason = why). Rare; only for explicit decisions.
-Same evidence rules as entries. Do not report planning talk as progress. Empty is the common case.`;
+Same evidence rules as entries. Do not report planning talk as progress. Empty is the common case.
+
+# Starting a roadmap (only when <no_roadmap> is given; otherwise newPlan is null)
+
+The session's project has no roadmap and no plan documents. Start one only when the new turns are genuine work on this project: building it, planning it, or brainstorming its direction and what to build. Then return newPlan: direction (short noun phrase for the approach), goal (one line: what the project is for), and the phases or milestones in order (at least one), with tasks under them where the turns name them. Each milestone needs a verbatim evidence quote from the new turns. Use ids the conversation gives (e.g. "Phase 1", "M2") as key. Status is planned unless the turns show the work done or under way.
+Confidence: 0.8 or more only when the developer explicitly agreed to the plan; brainstorming that hasn't settled is below 0.7 (it is drawn as unconfirmed).
+Return null for everything else: general questions, tool or account help, one-off fixes, chit-chat, and work that is really about a different project from <known_projects>.`;
 
 export interface ExtractInput {
   sessionProject: Project;
@@ -70,6 +76,8 @@ export interface ExtractInput {
   newTurns: Turn[];
   /** Rendered trajectory of the session's project, when it has one (module 2). */
   trajectory?: string;
+  /** The session's project has neither a roadmap nor plan docs: a session may start one. */
+  noRoadmap?: boolean;
 }
 
 const TURN_MAX_CHARS = 6000;
@@ -98,6 +106,11 @@ export function renderExtractionInput(input: ExtractInput): string {
     `<known_projects>\n${projects}\n</known_projects>`,
     `<existing_entries>\n${existing}\n</existing_entries>`,
     ...(input.trajectory ? [`<trajectory>\n${input.trajectory}\n</trajectory>`] : []),
+    ...(input.noRoadmap
+      ? [
+          `<no_roadmap project="${input.sessionProject.name}">This project has no roadmap or plan documents yet.</no_roadmap>`,
+        ]
+      : []),
     `<earlier_turns note="context only; already processed, do not extract or quote from these">\n${context}\n</earlier_turns>`,
     `<new_turns>\n${input.newTurns.map(renderTurn).join("\n\n")}\n</new_turns>`,
   ].join("\n\n");

@@ -9,7 +9,7 @@ import { attributePlan, findDocs, type Doc } from "./docs.ts";
 import { missingKeys, type PlanExtraction } from "./extract.ts";
 import { applyCommits, keyPattern, readCommits, referencedForeignKeys } from "./git.ts";
 import { advances, applyPlan } from "./reconcile.ts";
-import { applyProgress, renderTrajectory } from "./session.ts";
+import { applyProgress, applySessionPlan, renderTrajectory } from "./session.ts";
 import { TrajectoryStore } from "./store.ts";
 
 const docs: Doc[] = [
@@ -326,6 +326,7 @@ describe("session progress", () => {
           nodeId: id("CH-002"),
           title: "",
           milestoneId: null,
+          kind: null,
           reason: null,
           confidence: 0.9,
           evidence: [{ turnUuid: "u1", quote: "CH-002 is done, tests pass" }],
@@ -335,6 +336,7 @@ describe("session progress", () => {
           nodeId: id("CH-003"),
           title: "",
           milestoneId: null,
+          kind: null,
           reason: null,
           confidence: 0.9,
           evidence: [{ turnUuid: "a1", quote: "CH-003 has started" }],
@@ -344,6 +346,7 @@ describe("session progress", () => {
           nodeId: null,
           title: "Retry failed model calls",
           milestoneId: id("H0"),
+          kind: null,
           reason: null,
           confidence: 0.9,
           evidence: [{ turnUuid: "u1", quote: "add a retry story" }],
@@ -353,6 +356,7 @@ describe("session progress", () => {
           nodeId: id("CH-001"),
           title: "",
           milestoneId: null,
+          kind: null,
           reason: null,
           confidence: 0.9,
           evidence: [{ turnUuid: "u1", quote: "not in the transcript" }],
@@ -384,6 +388,7 @@ describe("session progress", () => {
           nodeId: null,
           title: "VS Code extension",
           milestoneId: null,
+          kind: null,
           reason: "users live in the editor",
           confidence: 0.95,
           evidence: [{ turnUuid: "u2", quote: "building a VS Code extension instead" }],
@@ -426,6 +431,7 @@ describe("cross-project progress", () => {
       nodeId: id,
       title: "",
       milestoneId: null,
+      kind: null,
       reason: null,
       confidence: 0.9,
       evidence: [{ turnUuid: "u1", quote: "CH-002 is done" }],
@@ -435,6 +441,156 @@ describe("cross-project progress", () => {
     expect(applyProgress([item], ctx).changes).toBe(0);
     const res = applyProgress([item], { ...ctx, projectIds: [elsewhere.id, project.id] });
     expect(res).toEqual({ changes: 1, projects: [project.id] });
+  });
+});
+
+describe("roadmaps started by sessions", () => {
+  const turns: Turn[] = [
+    {
+      uuid: "u1",
+      role: "user",
+      text: "Let's build a budgeting app. Phase 1: import bank CSVs. Phase 2: monthly charts. Agreed, go.",
+      timestamp: "2026-10-14T09:00:00.000Z",
+    },
+  ];
+  const plan = (confidence: number) => ({
+    direction: "Budgeting app",
+    goal: "Track spending from bank exports",
+    confidence,
+    evidence: [{ turnUuid: "u1", quote: "Let's build a budgeting app" }],
+    milestones: [
+      {
+        title: "Import bank CSVs",
+        key: "Phase 1",
+        status: "planned" as const,
+        evidence: [{ turnUuid: "u1", quote: "Phase 1: import bank CSVs" }],
+        stories: [{ title: "Parse CSV", key: null, status: "planned" as const }],
+      },
+      {
+        title: "Monthly charts",
+        key: "Phase 2",
+        status: "planned" as const,
+        evidence: [{ turnUuid: "u1", quote: "Phase 2: monthly charts" }],
+        stories: [],
+      },
+      {
+        title: "Invented phase",
+        key: null,
+        status: "planned" as const,
+        evidence: [{ turnUuid: "u1", quote: "never said this" }],
+        stories: [],
+      },
+    ],
+  });
+
+  it("starts a confirmed roadmap from an agreed plan, dropping unbacked phases", () => {
+    const { project, t } = setup();
+    const trackId = applySessionPlan(plan(0.9), {
+      store: t,
+      projectId: project.id,
+      sessionId: "s",
+      newTurns: turns,
+    });
+    expect(trackId).not.toBeNull();
+    const h = heading(projectAt(t.data(project.id), NOW));
+    expect(h.track?.name).toBe("Budgeting app");
+    expect(h.goal?.title).toBe("Track spending from bank exports");
+    expect(h.milestones.map((m) => m.node.key)).toEqual(["Phase 1", "Phase 2"]);
+    expect(
+      t
+        .data(project.id)
+        .nodes.every((n) => n.reviewState === "confirmed" && n.source === "session"),
+    ).toBe(true);
+  });
+
+  it("draws brainstorming as unconfirmed, and never overwrites an existing roadmap", () => {
+    const { project, t } = setup();
+    applySessionPlan(plan(0.5), {
+      store: t,
+      projectId: project.id,
+      sessionId: "s",
+      newTurns: turns,
+    });
+    expect(t.data(project.id).nodes.every((n) => n.reviewState === "needs_review")).toBe(true);
+    expect(
+      applySessionPlan(plan(0.9), {
+        store: t,
+        projectId: project.id,
+        sessionId: "s",
+        newTurns: turns,
+      }),
+    ).toBeNull();
+  });
+
+  it("starts nothing when no phase is backed by the conversation", () => {
+    const { project, t } = setup();
+    const p = plan(0.9);
+    p.milestones = [p.milestones[2]!];
+    expect(
+      applySessionPlan(p, { store: t, projectId: project.id, sessionId: "s", newTurns: turns }),
+    ).toBeNull();
+    expect(t.hasTrajectory(project.id)).toBe(false);
+  });
+
+  it("lets plan docs take over the session-built line instead of adding a second one", () => {
+    const { project, t } = setup();
+    applySessionPlan(plan(0.9), {
+      store: t,
+      projectId: project.id,
+      sessionId: "s",
+      newTurns: turns,
+    });
+    const x = extraction();
+    x.tracks = [x.tracks[1]!];
+    x.tracks[0] = { ...x.tracks[0]!, forkedFromRef: null };
+    x.nodes = x.nodes.filter((n) => n.trackRef === "h");
+    applyPlan(x, { store: t, projectId: project.id, docs, now: NOW });
+    const tracks = t.data(project.id).tracks;
+    expect(tracks.map((tr) => tr.name)).toEqual(["Coding harness"]);
+  });
+
+  it("adds whole milestones only while sessions manage the roadmap", () => {
+    const { project, t } = setup();
+    applySessionPlan(plan(0.9), {
+      store: t,
+      projectId: project.id,
+      sessionId: "s",
+      newTurns: turns,
+    });
+    const more: Turn[] = [
+      {
+        uuid: "u2",
+        role: "user",
+        text: "Add a phase 3 for budgets and alerts.",
+        timestamp: "2026-10-15T09:00:00.000Z",
+      },
+    ];
+    const item = {
+      action: "added" as const,
+      nodeId: null,
+      title: "Budgets and alerts",
+      milestoneId: null,
+      kind: "milestone" as const,
+      reason: null,
+      confidence: 0.9,
+      evidence: [{ turnUuid: "u2", quote: "Add a phase 3 for budgets and alerts" }],
+    };
+    const ctx = {
+      store: t,
+      projectId: project.id,
+      sessionId: "s",
+      newTurns: more,
+      now: "2026-10-15T12:00:00.000Z",
+    };
+    expect(applyProgress([item], ctx).changes).toBe(0);
+    expect(applyProgress([item], { ...ctx, sessionManaged: new Set([project.id]) }).changes).toBe(
+      1,
+    );
+    const titles = t
+      .data(project.id)
+      .nodes.filter((n) => n.kind === "milestone")
+      .map((n) => n.title);
+    expect(titles).toContain("Budgets and alerts");
   });
 });
 
