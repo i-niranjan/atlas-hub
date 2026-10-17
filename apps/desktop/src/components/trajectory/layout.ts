@@ -14,7 +14,7 @@ export const TOP = 58;
 export const LEFT = 36;
 /** Wide enough for a station label (key + ~20 characters) so labels never collide. */
 const STATION_GAP = 112;
-const STORY_GAP = 17;
+const STORY_GAP = 21;
 const FORK_GAP = 44;
 
 export interface Station {
