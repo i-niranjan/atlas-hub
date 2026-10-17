@@ -6,8 +6,10 @@ summary: TypeScript 7.0.2 is latest, but typescript-eslint 8.71 requires <6.1, s
 status: active
 supersedes: null
 date: 2026-10-17
-review: needs_review
+review: confirmed
 evidence:
+  - session: f905cf1a-b87d-4fbe-b5e3-2e0d7dbf7553
+    quote: "confrim the sqllite adn typescript"
   - session: f905cf1a-b87d-4fbe-b5e3-2e0d7dbf7553
     quote: "typescript: '>=4.8.4 <6.1.0'"
 ---
@@ -28,4 +30,4 @@ Pin `typescript@6.0.3`. Revisit when typescript-eslint widens its peer range.
 
 One dependency to bump later.
 
-Made by the agent during setup without discussion with the user, hence `needs_review`.
+Initially agent-proposed; confirmed by the user on 2026-10-17.

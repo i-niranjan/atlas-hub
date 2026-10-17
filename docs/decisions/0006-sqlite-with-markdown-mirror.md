@@ -6,8 +6,10 @@ summary: SQLite is the source of truth for queries and search; a markdown mirror
 status: active
 supersedes: null
 date: 2026-10-17
-review: needs_review
+review: confirmed
 evidence:
+  - session: f905cf1a-b87d-4fbe-b5e3-2e0d7dbf7553
+    quote: "confrim the sqllite adn typescript"
   - session: f905cf1a-b87d-4fbe-b5e3-2e0d7dbf7553
     quote: "Keep markdown alongside SQLite."
 ---
@@ -29,4 +31,4 @@ Atlas needs fast local queries (lineage, full-text search) and data that outlive
 
 Two representations. SQLite wins on conflict, and the mirror is regenerated from it.
 
-Proposed by the agent in the plan. The user approved the plan as a whole but never discussed this choice specifically, hence `needs_review`.
+Initially agent-proposed; confirmed by the user on 2026-10-17.

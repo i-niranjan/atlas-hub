@@ -1,0 +1,29 @@
+{
+  "name": "@atlas/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "atlasd: ingests Claude Code transcripts, extracts decisions, serves the API, MCP and AG-UI endpoints.",
+  "type": "module",
+  "bin": {
+    "atlas": "./src/cli.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "node --watch src/cli.ts serve"
+  },
+  "dependencies": {
+    "@ag-ui/core": "1.0.3",
+    "@ag-ui/encoder": "1.0.3",
+    "@anthropic-ai/sdk": "0.135.0",
+    "@atlas/core": "workspace:*",
+    "@hono/node-server": "2.1.5",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "better-sqlite3": "13.0.3",
+    "hono": "4.13.13",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0"
+  }
+}
