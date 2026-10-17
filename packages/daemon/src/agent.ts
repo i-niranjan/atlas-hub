@@ -5,6 +5,7 @@ import {
   referencedEntryIds,
   validateView,
   type Block,
+  type CanvasState,
   type EntryDetail,
   type ProjectSummary,
 } from "@atlas/core";
@@ -18,13 +19,6 @@ import type { Store } from "./store.ts";
  * and finishes by calling `render_view`; the view goes to the app as an AG-UI
  * STATE_SNAPSHOT with every referenced entry resolved from the store.
  */
-
-export interface CanvasState {
-  view: { title: string; blocks: Block[] } | null;
-  entries: Record<string, EntryDetail>;
-  projects: Record<string, ProjectSummary>;
-  dropped: string[];
-}
 
 const SYSTEM = `You are the canvas of Atlas, a macOS app that records the decisions, architecture, constraints, open questions and pivots behind the developer's projects. The developer asks a question; you look up what is recorded and compose a view that answers it.
 

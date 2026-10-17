@@ -1,5 +1,6 @@
 import type { Entry } from "./entry.ts";
 import type { Project, Session } from "./project.ts";
+import type { Block } from "./ui-spec.ts";
 
 /** Shapes returned by atlasd's HTTP API, shared with the desktop app. */
 
@@ -22,6 +23,20 @@ export interface StatusReport {
   hooksInstalled: boolean;
   mcpRegistered: boolean;
   queue: { pending: number; waitingForKey: number; errors: number };
+}
+
+/** The AG-UI shared state the canvas agent publishes via STATE_SNAPSHOT. */
+export interface CanvasState {
+  view: { title: string; blocks: Block[] } | null;
+  entries: Record<string, EntryDetail>;
+  projects: Record<string, ProjectSummary>;
+  dropped: string[];
+}
+
+export interface Lens {
+  id: string;
+  title: string;
+  prompt: string;
 }
 
 /** Pushed on GET /events. */
