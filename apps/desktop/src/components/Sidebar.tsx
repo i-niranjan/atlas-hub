@@ -1,5 +1,5 @@
 import type { Lens, ProjectSummary, StatusReport } from "@atlas/core";
-import { Folder, Inbox, Layers, Plus, Settings, X } from "lucide-react";
+import { Folder, Inbox, Layers, Plus, Settings, Signpost, Waypoints, X } from "lucide-react";
 import type { ReactNode } from "react";
 import type { LiveState } from "../lib/queries.ts";
 
@@ -14,6 +14,9 @@ interface Props {
   reviewCount: number;
   selection: Selection | null;
   onSelect: (s: Selection) => void;
+  /** Which view of the selected project is showing. */
+  view: "decisions" | "trajectory" | null;
+  onSelectView: (projectId: string, view: "decisions" | "trajectory") => void;
   onDeleteLens: (id: string) => void;
   onAddProject: () => void;
   onOpenSettings: () => void;
@@ -121,7 +124,8 @@ export function Sidebar(props: Props) {
 
         {projects?.map((p) => {
           const active = now - new Date(p.lastActive).getTime() < RECENT_MS;
-          const isSelected = selection?.kind === "project" && selection.projectId === p.id;
+          const isSelected =
+            selection?.kind === "project" && selection.projectId === p.id && props.view === null;
           return (
             <div key={p.id}>
               <Row
@@ -141,6 +145,24 @@ export function Sidebar(props: Props) {
                 }
                 onClick={() => props.onSelect({ kind: "project", projectId: p.id })}
               />
+              {selectedProject === p.id && (
+                <>
+                  <Row
+                    indent
+                    selected={selection?.kind === "project" && props.view === "decisions"}
+                    icon={<Signpost size={14} strokeWidth={1.8} />}
+                    label="Decisions"
+                    onClick={() => props.onSelectView(p.id, "decisions")}
+                  />
+                  <Row
+                    indent
+                    selected={selection?.kind === "project" && props.view === "trajectory"}
+                    icon={<Waypoints size={14} strokeWidth={1.8} />}
+                    label="Trajectory"
+                    onClick={() => props.onSelectView(p.id, "trajectory")}
+                  />
+                </>
+              )}
               {selectedProject === p.id &&
                 props.lenses.map((lens) => (
                   <Row

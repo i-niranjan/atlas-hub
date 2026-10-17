@@ -247,6 +247,7 @@ export function TrajectoryMap({
           <HoverCard
             hover={hover}
             width={size.w}
+            height={mapHeight}
             onOpenEntry={onOpenEntry}
             onLeave={() => setHover(null)}
           />
@@ -396,22 +397,28 @@ function Minimap({
 function HoverCard({
   hover,
   width,
+  height,
   onOpenEntry,
   onLeave,
 }: {
   hover: Hover;
   width: number;
+  height: number;
   onOpenEntry: ((id: string) => void) | undefined;
   onLeave: () => void;
 }) {
   const left = Math.min(width - 270, Math.max(8, hover.x - 130));
+  // Open above the point in the lower half so the card is never cut off by the map edge.
+  const below = hover.y < height / 2;
+  const vert = (gap: number) =>
+    below ? { top: hover.y + gap } : { bottom: height - hover.y + gap };
   if (hover.kind === "decisions") {
     return (
       <div
         className="absolute z-20 w-[260px] rounded-[10px] py-1.5"
         style={{
           left,
-          top: hover.y + 14,
+          ...vert(14),
           background: "var(--elevated)",
           boxShadow: "var(--shadow-pop)",
         }}
@@ -442,7 +449,7 @@ function HoverCard({
       className="pointer-events-none absolute z-20 w-[240px] rounded-[10px] px-3 py-2.5"
       style={{
         left,
-        top: hover.y + 16,
+        ...vert(16),
         background: "var(--elevated)",
         boxShadow: "var(--shadow-pop)",
       }}
@@ -459,6 +466,11 @@ function HoverCard({
         {n.key ? ` · ${n.key}` : ""}
       </div>
       <div className="t-headline mt-0.5">{n.title}</div>
+      {n.explain && (
+        <div className="t-callout mt-1" style={{ color: "var(--label-2)" }}>
+          {n.explain}
+        </div>
+      )}
       <div className="t-caption mt-1" style={{ color: "var(--label-2)" }}>
         {STATUS_LABEL[n.status]}
         {n.reviewState === "needs_review" ? " · unconfirmed" : ""}
@@ -606,7 +618,10 @@ function LaneView({
                     {s.node.key}{" "}
                   </tspan>
                 )}
-                {truncate(s.node.title, abandoned ? 14 : s.node.key ? 17 : 21)}
+                {truncate(
+                  s.node.title,
+                  Math.max(6, (abandoned ? 19 : 25) - (s.node.key ? s.node.key.length + 1 : 0)),
+                )}
               </motion.text>
             )}
             {here && v && (

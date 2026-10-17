@@ -328,6 +328,13 @@ export function App() {
           reviewCount={reviewQueue.length}
           selection={selection}
           onSelect={select}
+          view={selection?.kind === "project" && mode === "timeline" ? view : null}
+          onSelectView={(pid, v) => {
+            if (selection?.kind !== "project" || selection.projectId !== pid) {
+              select({ kind: "project", projectId: pid });
+            }
+            setView(v);
+          }}
           onDeleteLens={(id) => deleteLens.mutate(id)}
           onAddProject={() => void addProject()}
           onOpenSettings={() => setSettingsOpen(true)}

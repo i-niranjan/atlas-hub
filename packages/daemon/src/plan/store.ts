@@ -1,4 +1,5 @@
 import type {
+  Primer,
   TrajectoryEvidence as Evidence,
   NodeKind,
   NodeSource,
@@ -34,6 +35,7 @@ interface NodeRow {
   title: string;
   parent_id: string | null;
   sort: number;
+  explain: string | null;
   review_state: ReviewState;
   source: NodeSource;
   created_at: string;
@@ -58,6 +60,7 @@ const toNode = (r: NodeRow): TNode => ({
   title: r.title,
   parentId: r.parent_id,
   sort: r.sort,
+  explain: r.explain,
   reviewState: r.review_state,
   source: r.source,
   createdAt: r.created_at,
@@ -114,7 +117,23 @@ export class TrajectoryStore {
           source: e.source,
         }) as TrajectoryEvent,
     );
-    return { projectId, tracks, nodes, events };
+    return { projectId, tracks, nodes, events, primer: this.primer(projectId) };
+  }
+
+  primer(projectId: string): Primer | null {
+    const r = this.db
+      .prepare(`SELECT one_liner, terms_json FROM project_primer WHERE project_id = ?`)
+      .get(projectId) as { one_liner: string; terms_json: string } | undefined;
+    return r ? { oneLiner: r.one_liner, terms: JSON.parse(r.terms_json) as Primer["terms"] } : null;
+  }
+
+  setPrimer(projectId: string, primer: Primer, at: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO project_primer (project_id, one_liner, terms_json, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(project_id) DO UPDATE SET one_liner = excluded.one_liner, terms_json = excluded.terms_json, updated_at = excluded.updated_at`,
+      )
+      .run(projectId, primer.oneLiner, JSON.stringify(primer.terms), at);
   }
 
   hasTrajectory(projectId: string): boolean {
@@ -268,12 +287,18 @@ export class TrajectoryStore {
     return true;
   }
 
-  createNode(n: Omit<TNode, "id" | "createdAt"> & { at: string; status: NodeStatus }): string {
+  createNode(
+    n: Omit<TNode, "id" | "createdAt" | "explain"> & {
+      at: string;
+      status: NodeStatus;
+      explain?: string | null;
+    },
+  ): string {
     const nodeId = id("n");
     this.db
       .prepare(
-        `INSERT INTO nodes (id, project_id, track_id, kind, key, title, parent_id, sort, review_state, source, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO nodes (id, project_id, track_id, kind, key, title, parent_id, sort, review_state, source, created_at, explain)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         nodeId,
@@ -287,6 +312,7 @@ export class TrajectoryStore {
         n.reviewState,
         n.source,
         n.at,
+        n.explain ?? null,
       );
     this.event(n.projectId, n.at, "node_created", nodeId, n.status, n.source);
     return nodeId;
@@ -294,16 +320,16 @@ export class TrajectoryStore {
 
   updateNode(
     nodeId: string,
-    patch: Partial<Pick<TNode, "title" | "sort" | "parentId" | "key" | "trackId">>,
+    patch: Partial<Pick<TNode, "title" | "sort" | "parentId" | "key" | "trackId" | "explain">>,
   ): void {
     const cur = this.node(nodeId);
     if (!cur) return;
     const next = { ...cur, ...patch };
     this.db
       .prepare(
-        `UPDATE nodes SET title = ?, sort = ?, parent_id = ?, key = ?, track_id = ? WHERE id = ?`,
+        `UPDATE nodes SET title = ?, sort = ?, parent_id = ?, key = ?, track_id = ?, explain = ? WHERE id = ?`,
       )
-      .run(next.title, next.sort, next.parentId, next.key, next.trackId, nodeId);
+      .run(next.title, next.sort, next.parentId, next.key, next.trackId, next.explain, nodeId);
   }
 
   setNodeStatus(nodeId: string, status: NodeStatus, at: string, source: NodeSource): boolean {
@@ -345,6 +371,7 @@ export class TrajectoryStore {
       this.db.prepare(`DELETE FROM nodes WHERE project_id = ?`).run(projectId);
       this.db.prepare(`DELETE FROM tracks WHERE project_id = ?`).run(projectId);
       this.db.prepare(`DELETE FROM doc_state WHERE project_id = ?`).run(projectId);
+      this.db.prepare(`DELETE FROM project_primer WHERE project_id = ?`).run(projectId);
     })();
   }
 

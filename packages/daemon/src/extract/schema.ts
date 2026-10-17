@@ -45,6 +45,8 @@ export const NewPlan = z.object({
       title: z.string(),
       key: z.string().nullable(),
       status: z.enum(["planned", "in_progress", "done"]),
+      /** One plain sentence for someone new to the project. */
+      explain: z.string().nullable(),
       evidence: z.array(Quote),
       stories: z.array(
         z.object({

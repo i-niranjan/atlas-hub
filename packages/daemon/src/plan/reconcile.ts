@@ -128,6 +128,7 @@ export function applyPlan(
     sortByTrack.set(trackId, sort + 1);
     const key = n.key?.trim() || null;
     const title = n.title.trim().slice(0, 120);
+    const explain = n.kind !== "story" ? n.explain?.trim().slice(0, 160) || null : null;
     const match: TNode | undefined =
       (n.existingId ? nodesById.get(n.existingId) : undefined) ??
       (key ? existing.nodes.find((e) => e.key?.toLowerCase() === key.toLowerCase()) : undefined) ??
@@ -142,7 +143,13 @@ export function applyPlan(
     let nodeId: string;
     if (match) {
       nodeId = match.id;
-      store.updateNode(nodeId, { title, sort, key: key ?? match.key, trackId });
+      store.updateNode(nodeId, {
+        title,
+        sort,
+        key: key ?? match.key,
+        trackId,
+        explain: explain ?? match.explain,
+      });
       if (advances(store.currentStatus(nodeId), status)) {
         store.setNodeStatus(nodeId, status, changedAt(n.evidence.path), source);
         result.changed++;
@@ -154,6 +161,7 @@ export function applyPlan(
         kind: n.kind,
         key,
         title,
+        explain,
         parentId: null,
         sort,
         reviewState: "confirmed",
@@ -172,6 +180,21 @@ export function applyPlan(
     if (!id) continue;
     const parentId = n.parentRef ? (nodeIdByRef.get(n.parentRef) ?? null) : null;
     store.updateNode(id, { parentId });
+  }
+
+  // ── primer: only terms that actually appear on the map, so it explains what you see ──
+  if (x.primer?.oneLiner?.trim()) {
+    const onMap = normalise(
+      [
+        ...store.data(projectId).nodes.map((n) => n.title),
+        ...store.data(projectId).tracks.map((t) => t.name),
+      ].join(" "),
+    );
+    const terms = x.primer.terms
+      .map((t) => ({ term: t.term.trim().slice(0, 40), meaning: t.meaning.trim().slice(0, 140) }))
+      .filter((t) => t.term && t.meaning && onMap.includes(normalise(t.term)))
+      .slice(0, 6);
+    store.setPrimer(projectId, { oneLiner: x.primer.oneLiner.trim().slice(0, 160), terms }, now);
   }
 
   // ── forks and abandonment (after nodes, so fork points exist) ──

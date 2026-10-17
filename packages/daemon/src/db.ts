@@ -161,6 +161,16 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (code_project_id, docs_project_id)
   );
   `,
+  // 3 · Newcomer-friendly maps: a plain explanation per node and a per-project primer.
+  `
+  ALTER TABLE nodes ADD COLUMN explain TEXT;
+  CREATE TABLE project_primer (
+    project_id TEXT PRIMARY KEY,
+    one_liner  TEXT NOT NULL,
+    terms_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function openDb(path: string): DB {

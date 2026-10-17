@@ -6,6 +6,7 @@ import { useTrajectory } from "../../lib/queries.ts";
 import { EmptyState, SkeletonRows } from "../ui.tsx";
 import { HeadingCard } from "./Heading.tsx";
 import { NodeDetail } from "./NodeDetail.tsx";
+import { Primer } from "./Primer.tsx";
 import { ScopeChart } from "./ScopeChart.tsx";
 import { TrajectoryMap } from "./TrajectoryMap.tsx";
 
@@ -49,6 +50,7 @@ export function Trajectory({
     <div className="flex min-w-0 flex-1">
       <div className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-6 pt-5 pb-10">
+          {data.primer && <Primer primer={data.primer} />}
           <HeadingCard heading={h} state={state} onSelectNode={(id) => onSelectNode(id)} />
 
           <section

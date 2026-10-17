@@ -65,6 +65,7 @@ Same evidence rules as entries. Do not report planning talk as progress. Empty i
 # Starting a roadmap (only when <no_roadmap> is given; otherwise newPlan is null)
 
 The session's project has no roadmap and no plan documents. Start one only when the new turns are genuine work on this project: building it, planning it, or brainstorming its direction and what to build. Then return newPlan: direction (short noun phrase for the approach), goal (one line: what the project is for), and the phases or milestones in order (at least one), with tasks under them where the turns name them. Each milestone needs a verbatim evidence quote from the new turns. Use ids the conversation gives (e.g. "Phase 1", "M2") as key. Status is planned unless the turns show the work done or under way.
+Write for someone with no context on the project: plain-word titles (at most 8 words) that say what each phase delivers, and an explain sentence (at most 90 characters) per milestone; no internal shorthand.
 Confidence: 0.8 or more only when the developer explicitly agreed to the plan; brainstorming that hasn't settled is below 0.7 (it is drawn as unconfirmed).
 Return null for everything else: general questions, tool or account help, one-off fixes, chit-chat, and work that is really about a different project from <known_projects>.`;
 

@@ -33,9 +33,17 @@ export interface TNode {
   title: string;
   parentId: string | null;
   sort: number;
+  /** One plain sentence for someone new to the project (goals and milestones). */
+  explain: string | null;
   reviewState: ReviewState;
   source: NodeSource;
   createdAt: string;
+}
+
+/** What a newcomer needs to read the map: the project in a line, and its own jargon. */
+export interface Primer {
+  oneLiner: string;
+  terms: { term: string; meaning: string }[];
 }
 
 export type TrajectoryEvent =
@@ -82,6 +90,7 @@ export interface TrajectoryEvidence {
 
 export interface TrajectoryData {
   projectId: string;
+  primer?: Primer | null;
   tracks: Track[];
   nodes: TNode[];
   events: TrajectoryEvent[];

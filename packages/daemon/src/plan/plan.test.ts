@@ -65,6 +65,7 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         title: "API skeleton",
         parentRef: null,
         status: "planned",
+        explain: null,
         evidence: q("archive/cloud.md", "Phase 1 API skeleton"),
       },
       {
@@ -76,6 +77,7 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         title: "Reproducible foundation",
         parentRef: null,
         status: "planned",
+        explain: null,
         evidence: q("backlog.md", "H0 Reproducible foundation"),
       },
       {
@@ -87,6 +89,7 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         title: "Pin the toolchain",
         parentRef: "h0",
         status: "done",
+        explain: null,
         evidence: q("backlog.md", "CH-001 done"),
       },
       {
@@ -98,6 +101,7 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         title: "Model round-trip",
         parentRef: "h0",
         status: "planned",
+        explain: null,
         evidence: q("backlog.md", "CH-002 Model round-trip"),
       },
       {
@@ -109,6 +113,7 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         title: "Read-only agent",
         parentRef: null,
         status: "planned",
+        explain: null,
         evidence: q("backlog.md", "H1 Read-only agent"),
       },
       {
@@ -120,6 +125,7 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         title: "Read tools",
         parentRef: "h1",
         status: "planned",
+        explain: null,
         evidence: q("backlog.md", "CH-003 Read tools"),
       },
       {
@@ -131,9 +137,17 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         title: "Invented work",
         parentRef: "h1",
         status: "planned",
+        explain: null,
         evidence: q("backlog.md", "CH-099 something that is not there"),
       },
     ],
+    primer: {
+      oneLiner: "A coding agent you run from the terminal",
+      terms: [
+        { term: "harness", meaning: "The program that runs the agent and its tools" },
+        { term: "Queen", meaning: "Never appears on the map, so it is filtered out" },
+      ],
+    },
     ...over,
   };
 }
@@ -178,6 +192,15 @@ describe("applyPlan", () => {
     const c1 = data.nodes.find((n) => n.trackId === cloud.id && n.kind === "milestone")!;
     expect(t.currentStatus(c1.id)).toBe("planned");
     expect(c1.createdAt >= cloud.createdAt).toBe(true);
+  });
+
+  it("keeps a newcomer primer with only the terms that appear on the map", () => {
+    const { project, t } = setup();
+    applyPlan(extraction(), { store: t, projectId: project.id, docs, now: NOW });
+    expect(t.data(project.id).primer).toEqual({
+      oneLiner: "A coding agent you run from the terminal",
+      terms: [{ term: "harness", meaning: "The program that runs the agent and its tools" }],
+    });
   });
 
   it("uses the document's stated date for when the plan appeared", () => {
@@ -463,6 +486,7 @@ describe("roadmaps started by sessions", () => {
         title: "Import bank CSVs",
         key: "Phase 1",
         status: "planned" as const,
+        explain: null,
         evidence: [{ turnUuid: "u1", quote: "Phase 1: import bank CSVs" }],
         stories: [{ title: "Parse CSV", key: null, status: "planned" as const }],
       },
@@ -470,6 +494,7 @@ describe("roadmaps started by sessions", () => {
         title: "Monthly charts",
         key: "Phase 2",
         status: "planned" as const,
+        explain: null,
         evidence: [{ turnUuid: "u1", quote: "Phase 2: monthly charts" }],
         stories: [],
       },
@@ -477,6 +502,7 @@ describe("roadmaps started by sessions", () => {
         title: "Invented phase",
         key: null,
         status: "planned" as const,
+        explain: null,
         evidence: [{ turnUuid: "u1", quote: "never said this" }],
         stories: [],
       },

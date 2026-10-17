@@ -67,6 +67,11 @@ export function NodeDetail({
             {d.track ? ` · ${d.track.name}` : ""}
           </div>
           <h2 className="t-title2 selectable mt-1">{d.node.title}</h2>
+          {d.node.explain && (
+            <p className="t-body selectable mt-1.5" style={{ color: "var(--label-2)" }}>
+              {d.node.explain}
+            </p>
+          )}
           <div className="mt-2 flex flex-wrap gap-1.5">
             {d.status && (
               <Pill

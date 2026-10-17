@@ -35,9 +35,15 @@ export const PlanExtraction = z.object({
       title: z.string(),
       parentRef: z.string().nullable(),
       status: z.enum(["planned", "in_progress", "done", "dropped", "blocked"]),
+      /** Goals and milestones: one plain sentence for a newcomer. Null for stories. */
+      explain: z.string().nullable(),
       evidence: Quote,
     }),
   ),
+  primer: z.object({
+    oneLiner: z.string(),
+    terms: z.array(z.object({ term: z.string(), meaning: z.string() })),
+  }),
 });
 export type PlanExtraction = z.infer<typeof PlanExtraction>;
 
@@ -52,6 +58,16 @@ A track is one coherent direction for the project. Usually there is one active t
 - story: the work items under a milestone (key = the documents' id, e.g. "CH-014"; parentRef = the milestone's ref).
 For an abandoned track, give its goal and its main milestones or phases (3 to 8, in order) so the map can show what was originally planned; no stories.
 Include every milestone and story the current plan lists; never sample or summarise a backlog. List nodes in the documents' order. Titles: at most 70 characters, specific, no ids repeated in the title.
+
+# Wording: write for someone who has never seen this project
+The person reading the map has no context. Every title must make sense on its own:
+- Titles: plain words, at most 8, saying what the step delivers ("Agent edits code safely in a sandbox"), not internal shorthand ("Isolated coding"). Keep ids in key, never in the title.
+- explain: for the goal and each milestone, one plain sentence (at most 90 characters) on what it means and why it matters. Null for stories.
+- Avoid jargon. When a project-specific word is unavoidable (a component's name, an acronym), keep it and define it in primer.terms.
+
+# primer
+- oneLiner: what this project is, for a newcomer, at most 120 characters.
+- terms: up to 6 project-specific words that appear in your titles or goal, each with a plain meaning of at most 80 characters. Only words a newcomer wouldn't know.
 
 # Status
 Only from explicit statements: progress tables, resume or status notes, checkmarks, "done", "complete", "in progress", "dropped", "blocked". A plan saying what will be built is "planned". Never infer progress.

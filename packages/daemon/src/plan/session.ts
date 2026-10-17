@@ -262,6 +262,7 @@ export function applySessionPlan(
       kind: "milestone",
       key: m.key?.trim() || null,
       title: m.title.trim().slice(0, 120),
+      explain: m.explain?.trim().slice(0, 160) || null,
       parentId: null,
       sort: sort++,
       reviewState: review,
