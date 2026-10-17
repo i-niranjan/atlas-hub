@@ -86,6 +86,81 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  // 2 · Trajectory (module 2). Events are append-only: never UPDATE or DELETE them.
+  `
+  CREATE TABLE project_roots (
+    path       TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    role       TEXT NOT NULL DEFAULT 'primary',
+    last_sha   TEXT,
+    added_at   TEXT NOT NULL
+  );
+  INSERT INTO project_roots (path, project_id, role, added_at)
+    SELECT root_path, id, 'primary', first_seen FROM projects;
+
+  CREATE TABLE tracks (
+    id              TEXT PRIMARY KEY,
+    project_id      TEXT NOT NULL REFERENCES projects(id),
+    name            TEXT NOT NULL,
+    parent_track_id TEXT,
+    fork_node_id    TEXT,
+    reason          TEXT,
+    created_at      TEXT NOT NULL
+  );
+  CREATE INDEX tracks_project ON tracks(project_id);
+
+  CREATE TABLE nodes (
+    id           TEXT PRIMARY KEY,
+    project_id   TEXT NOT NULL REFERENCES projects(id),
+    track_id     TEXT NOT NULL REFERENCES tracks(id),
+    kind         TEXT NOT NULL,
+    key          TEXT,
+    title        TEXT NOT NULL,
+    parent_id    TEXT,
+    sort         REAL NOT NULL,
+    review_state TEXT NOT NULL,
+    source       TEXT NOT NULL,
+    created_at   TEXT NOT NULL
+  );
+  CREATE INDEX nodes_project ON nodes(project_id);
+  CREATE INDEX nodes_key ON nodes(project_id, key);
+
+  CREATE TABLE trajectory_events (
+    id         INTEGER PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    at         TEXT NOT NULL,
+    type       TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    value      TEXT,
+    source     TEXT NOT NULL
+  );
+  CREATE INDEX trajectory_events_project ON trajectory_events(project_id, at);
+
+  CREATE TABLE trajectory_evidence (
+    id         INTEGER PRIMARY KEY,
+    subject_id TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    ref        TEXT NOT NULL,
+    excerpt    TEXT NOT NULL,
+    at         TEXT NOT NULL,
+    UNIQUE (subject_id, kind, ref, excerpt)
+  );
+
+  CREATE TABLE doc_state (
+    project_id  TEXT PRIMARY KEY,
+    hash        TEXT NOT NULL,
+    ingested_at TEXT NOT NULL
+  );
+
+  CREATE TABLE link_suggestions (
+    code_project_id TEXT NOT NULL,
+    docs_project_id TEXT NOT NULL,
+    sample          TEXT NOT NULL,
+    dismissed       INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL,
+    PRIMARY KEY (code_project_id, docs_project_id)
+  );
+  `,
 ];
 
 export function openDb(path: string): DB {

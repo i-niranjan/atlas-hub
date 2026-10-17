@@ -1,5 +1,5 @@
 import type { RunAgentInput } from "@ag-ui/core";
-import type { StatusReport } from "@atlas/core";
+import type { LinkSuggestion, NodeDetail, StatusReport } from "@atlas/core";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
@@ -11,6 +11,8 @@ import { VERSION, type Config } from "./config.ts";
 import { HookEvent, type Ingestor } from "./ingest/ingestor.ts";
 import { handleMcp } from "./mcp.ts";
 import type { Mirror } from "./mirror.ts";
+import type { PlanEngine } from "./plan/engine.ts";
+import type { TrajectoryStore } from "./plan/store.ts";
 import type { Store } from "./store.ts";
 
 export interface ServerDeps {
@@ -23,6 +25,8 @@ export interface ServerDeps {
   apiKey: () => string | null;
   setApiKey: (key: string | null) => Promise<void>;
   integrationStatus: () => { hooksInstalled: boolean; mcpRegistered: boolean };
+  trajectory: TrajectoryStore;
+  engine: PlanEngine;
 }
 
 const ALLOWED_ORIGINS = new Set([
@@ -205,12 +209,102 @@ export function createApp(deps: ServerDeps): Hono {
     return c.json({ ok: true });
   });
 
+  // ── module 2: trajectory ───────────────────────────────
+
+  app.get("/api/projects/:id/trajectory", (c) => c.json(deps.trajectory.data(c.req.param("id"))));
+
+  app.post("/api/projects/:id/trajectory/refresh", async (c) => {
+    await deps.engine.sync(c.req.param("id"), { force: true });
+    return c.json({ ok: true });
+  });
+
+  app.get("/api/nodes/:id", (c) => {
+    const t = deps.trajectory;
+    const node = t.node(c.req.param("id"));
+    if (!node) return c.json({ error: "not found" }, 404);
+    const detail: NodeDetail = {
+      node,
+      status: t.currentStatus(node.id),
+      track: t.track(node.trackId),
+      history: t.history(node.id),
+      evidence: t.evidence(node.id),
+    };
+    return c.json(detail);
+  });
+
+  app.post("/api/nodes/:id/review", async (c) => {
+    const body = z
+      .object({ state: z.enum(["confirmed", "dismissed"]) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "state required" }, 400);
+    const t = deps.trajectory;
+    const node = t.node(c.req.param("id"));
+    if (!node) return c.json({ error: "not found" }, 404);
+    const now = new Date().toISOString();
+    store.db.transaction(() => {
+      t.setNodeReview(node.id, body.data.state);
+      if (body.data.state === "dismissed") {
+        // Undo what the unconfirmed change did: restore the previous status, or drop an added item.
+        const statuses = t
+          .history(node.id)
+          .filter((e) => e.type === "node_created" || e.type === "node_status");
+        const previous = statuses.length > 1 ? statuses.at(-2)!.value : "dropped";
+        t.setNodeStatus(node.id, previous as "planned", now, "manual");
+      }
+    })();
+    bus.emit({ type: "trajectory.changed", projectId: node.projectId });
+    return c.json({ ok: true });
+  });
+
+  app.get("/api/link-suggestions", (c) => {
+    const out: LinkSuggestion[] = [];
+    for (const s of deps.trajectory.suggestions()) {
+      const code = store.getProject(s.codeProjectId);
+      const docs = store.getProject(s.docsProjectId);
+      if (code && docs)
+        out.push({
+          code: { id: code.id, name: code.name },
+          docs: { id: docs.id, name: docs.name },
+          sample: s.sample,
+        });
+    }
+    return c.json(out);
+  });
+
+  app.post("/api/link-suggestions/dismiss", async (c) => {
+    const body = z
+      .object({ codeId: z.string(), docsId: z.string() })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "codeId and docsId required" }, 400);
+    deps.trajectory.dismissSuggestion(body.data.codeId, body.data.docsId);
+    bus.emit({ type: "status.changed" });
+    return c.json({ ok: true });
+  });
+
+  app.post("/api/projects/:id/link", async (c) => {
+    const body = z
+      .object({ fromProjectId: z.string() })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "fromProjectId required" }, 400);
+    const into = c.req.param("id");
+    if (!store.getProject(into) || !store.getProject(body.data.fromProjectId))
+      return c.json({ error: "not found" }, 404);
+    // Linking re-reads docs, which can take a while; answer now and push updates over /events.
+    void deps.engine.link(into, body.data.fromProjectId);
+    return c.json({ ok: true }, 202);
+  });
+
   app.post("/agent", async (c) => {
     const input = (await c.req.json().catch(() => null)) as RunAgentInput | null;
     if (!input?.threadId || !input.runId || !Array.isArray(input.messages)) {
       return c.json({ error: "invalid RunAgentInput" }, 400);
     }
-    const body = runCanvas(input, { store, apiKey: deps.apiKey(), model: config.models.canvas });
+    const body = runCanvas(input, {
+      store,
+      trajectory: deps.trajectory,
+      apiKey: deps.apiKey(),
+      model: config.models.canvas,
+    });
     return new Response(body, {
       headers: {
         "Content-Type": "text/event-stream",
@@ -220,7 +314,9 @@ export function createApp(deps: ServerDeps): Hono {
     });
   });
 
-  app.all("/mcp", (c) => handleMcp(c.req.raw, { store, ingestor, onSaved }));
+  app.all("/mcp", (c) =>
+    handleMcp(c.req.raw, { store, ingestor, onSaved, trajectory: deps.trajectory }),
+  );
 
   return app;
 }

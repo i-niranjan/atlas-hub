@@ -8,6 +8,8 @@ import type { Config } from "../config.ts";
 import type { Extractor } from "../extract/llm.ts";
 import { reconcile } from "../extract/reconcile.ts";
 import type { Mirror } from "../mirror.ts";
+import { applyProgress, renderTrajectory } from "../plan/session.ts";
+import type { TrajectoryStore } from "../plan/store.ts";
 import type { Store } from "../store.ts";
 import { isDirectory, resolveProject } from "./project.ts";
 import { redact } from "./redact.ts";
@@ -31,6 +33,10 @@ export interface IngestorDeps {
   mirror: Mirror;
   /** Null until an API key is configured. */
   extractor: () => Extractor | null;
+  /** Module 2: when present, sessions also move the project's trajectory. */
+  trajectory?: TrajectoryStore;
+  /** Called after a session is processed, e.g. to re-check the project's git history. */
+  onProjectActivity?: (projectId: string) => void;
   log?: (msg: string) => void;
   now?: () => string;
 }
@@ -161,13 +167,29 @@ export class Ingestor {
           ...store.listEntries({ status: "resolved", limit: 20 }),
         ];
         const knownProjects = store.listProjects();
+        const tstore = this.deps.trajectory;
+        const trajectory =
+          tstore && tstore.hasTrajectory(project.id)
+            ? renderTrajectory(tstore.data(project.id), this.now)
+            : undefined;
         const batch = await extractor.extract({
           sessionProject: project,
           knownProjects,
           existing: shown,
           contextTurns: redacted.slice(Math.max(0, processed - CONTEXT_TURNS), processed),
           newTurns: chunk,
+          ...(trajectory ? { trajectory } : {}),
         });
+        if (tstore && trajectory && batch.progress.length) {
+          const moved = store.db.transaction(() =>
+            applyProgress(
+              batch.progress,
+              { store: tstore, projectId: project.id, sessionId, newTurns: chunk, now: this.now },
+              (m) => this.log(m),
+            ),
+          )();
+          if (moved) bus.emit({ type: "trajectory.changed", projectId: project.id });
+        }
         const outcome = reconcile(batch.entries, {
           store,
           sessionId,
@@ -192,6 +214,7 @@ export class Ingestor {
       session = store.getSession(sessionId)!;
       this.log(`processed ${sessionId} (${project.name}): ${session.processedTurns} turns`);
       bus.emit({ type: "session.changed", projectId: project.id, sessionId, state: "done" });
+      this.deps.onProjectActivity?.(project.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       store.updateSession(sessionId, { state: "error", error: message.slice(0, 500) });

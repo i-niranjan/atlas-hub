@@ -1,4 +1,5 @@
-import { Entry, EntryKind, type Project } from "@atlas/core";
+import { Entry, EntryKind, heading, projectAt, scopeSize, type Project } from "@atlas/core";
+import type { TrajectoryStore } from "./plan/store.ts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
@@ -11,6 +12,7 @@ export interface McpDeps {
   store: Store;
   ingestor: Ingestor;
   onSaved: (entryId: string) => void;
+  trajectory?: TrajectoryStore;
 }
 
 type AnyEntry = Entry & { source?: string };
@@ -43,8 +45,41 @@ function resolveProject(store: Store, ref: string | undefined): Project | null |
   return store.findProject(ref);
 }
 
-export function buildMcpServer({ store, ingestor, onSaved }: McpDeps): McpServer {
+export function buildMcpServer({ store, ingestor, onSaved, trajectory }: McpDeps): McpServer {
   const server = new McpServer({ name: "atlas", version: VERSION });
+
+  server.registerTool(
+    "atlas_heading",
+    {
+      title: "Where is this project heading?",
+      description:
+        "The project's current direction, goal, current milestone and story, progress on the next milestones, and abandoned directions with reasons. Use it to orient before planning work.",
+      inputSchema: {
+        project: z
+          .string()
+          .describe("Project name or root path (use the current working directory)"),
+      },
+    },
+    async ({ project }) => {
+      const p = store.findProject(project) ?? store.projectForRoot(project);
+      if (!p) return text(`Atlas has no project "${project}" yet.`);
+      if (!trajectory?.hasTrajectory(p.id)) return text(`Atlas has no roadmap for ${p.name} yet.`);
+      const state = projectAt(trajectory.data(p.id), new Date().toISOString());
+      const h = heading(state);
+      const scope = scopeSize(state);
+      const lines = [
+        `${p.name}: heading toward ${h.goal?.title ?? h.track?.name ?? "an unstated goal"}`,
+        `Direction: ${h.track?.name ?? "?"} · ${scope.done}/${scope.total} planned items done`,
+        `Now: ${h.now.milestone ? `${h.now.milestone.key ?? ""} ${h.now.milestone.title}`.trim() : "nothing open"}${h.now.story ? ` → ${h.now.story.key ?? ""} ${h.now.story.title}`.trimEnd() : ""}`,
+        ...h.milestones.map((m) => `  ${m.node.key ?? "·"} ${m.node.title}: ${m.done}/${m.total}`),
+        ...h.blocked.map((b) => `Blocked: ${b.title}`),
+        ...h.abandoned.map(
+          (t) => `Abandoned direction: ${t.name}${t.reason ? ` (${t.reason})` : ""}`,
+        ),
+      ];
+      return text(lines.join("\n"));
+    },
+  );
 
   server.registerTool(
     "atlas_search",

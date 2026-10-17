@@ -15,6 +15,8 @@ export interface Config {
   claudeProjectsDir: string;
   claudeSettingsPath: string;
   claudeUserConfigPath: string;
+  /** Claude Code plan-mode plans (module 2 reads them as plan versions). */
+  claudePlansDir: string;
   host: string;
   port: number;
   models: { extract: string; canvas: string };
@@ -34,6 +36,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     claudeProjectsDir: join(home, ".claude", "projects"),
     claudeSettingsPath: join(home, ".claude", "settings.json"),
     claudeUserConfigPath: join(home, ".claude.json"),
+    claudePlansDir: join(home, ".claude", "plans"),
     host: "127.0.0.1",
     port: Number(env.ATLAS_PORT ?? 47600),
     models: {

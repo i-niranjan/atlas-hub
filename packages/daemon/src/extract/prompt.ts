@@ -52,7 +52,15 @@ Every entry needs 1-3 evidence quotes copied verbatim from the NEW turns: the ex
 - alternatives: options actually considered and why each lost, only if the conversation says so
 - confidence: 0.9+ explicit developer choice; 0.7-0.9 clear agreement; ≤0.6 assistant-made or ambiguous
 
-If the new turns contain no decisions, return an empty list. That is the common case.`;
+If the new turns contain no decisions, return an empty list. That is the common case.
+
+# Progress (only when <trajectory> is given; otherwise return an empty progress list)
+
+<trajectory> lists the project's planned goal, milestones and stories with ids and status. Report movement on it that the new turns show:
+- started / done / dropped / blocked: an existing node (nodeId) whose work clearly began, was finished (implemented and verified, not merely discussed), was cut from scope, or is blocked.
+- added: new work the developer brought into scope (title; milestoneId when it clearly belongs to one).
+- pivot: the developer changed the project's direction so the current plan no longer applies (title = the new direction, reason = why). Rare; only for explicit decisions.
+Same evidence rules as entries. Do not report planning talk as progress. Empty is the common case.`;
 
 export interface ExtractInput {
   sessionProject: Project;
@@ -60,6 +68,8 @@ export interface ExtractInput {
   existing: Entry[];
   contextTurns: Turn[];
   newTurns: Turn[];
+  /** Rendered trajectory of the session's project, when it has one (module 2). */
+  trajectory?: string;
 }
 
 const TURN_MAX_CHARS = 6000;
@@ -87,6 +97,7 @@ export function renderExtractionInput(input: ExtractInput): string {
     `<session_project>${input.sessionProject.name}: ${input.sessionProject.rootPath}</session_project>`,
     `<known_projects>\n${projects}\n</known_projects>`,
     `<existing_entries>\n${existing}\n</existing_entries>`,
+    ...(input.trajectory ? [`<trajectory>\n${input.trajectory}\n</trajectory>`] : []),
     `<earlier_turns note="context only; already processed, do not extract or quote from these">\n${context}\n</earlier_turns>`,
     `<new_turns>\n${input.newTurns.map(renderTurn).join("\n\n")}\n</new_turns>`,
   ].join("\n\n");

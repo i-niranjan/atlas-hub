@@ -22,6 +22,9 @@ import {
 } from "./install.ts";
 import { keychain } from "./keychain.ts";
 import { Mirror } from "./mirror.ts";
+import { PlanEngine } from "./plan/engine.ts";
+import { AnthropicPlanExtractor } from "./plan/extract.ts";
+import { TrajectoryStore } from "./plan/store.ts";
 import { createApp } from "./server.ts";
 import { Store } from "./store.ts";
 
@@ -31,14 +34,33 @@ async function runtime(config: Config) {
   const mirror = new Mirror(config.mirrorDir);
   let apiKey = process.env.ANTHROPIC_API_KEY ?? (await keychain.get());
   let extractor = apiKey ? new AnthropicExtractor(apiKey, config.models.extract) : null;
-  const ingestor = new Ingestor({ store, config, bus, mirror, extractor: () => extractor });
+  let planExtractor = apiKey ? new AnthropicPlanExtractor(apiKey, config.models.extract) : null;
+  const trajectory = new TrajectoryStore(store.db);
+  const engine = new PlanEngine({
+    store,
+    trajectory,
+    bus,
+    plansDir: config.claudePlansDir,
+    extractor: () => planExtractor,
+  });
+  const ingestor = new Ingestor({
+    store,
+    config,
+    bus,
+    mirror,
+    extractor: () => extractor,
+    trajectory,
+    onProjectActivity: (projectId) => void engine.sync(projectId),
+  });
   const setApiKey = async (key: string | null) => {
     if (key) await keychain.set(key);
     else await keychain.remove();
     apiKey = key;
     extractor = key ? new AnthropicExtractor(key, config.models.extract) : null;
+    planExtractor = key ? new AnthropicPlanExtractor(key, config.models.extract) : null;
+    if (key) void engine.syncAll();
   };
-  return { store, bus, mirror, ingestor, apiKey: () => apiKey, setApiKey };
+  return { store, bus, mirror, ingestor, trajectory, engine, apiKey: () => apiKey, setApiKey };
 }
 
 async function cmdServe(config: Config): Promise<void> {
@@ -56,6 +78,8 @@ async function cmdServe(config: Config): Promise<void> {
   serve({ fetch: app.fetch, hostname: config.host, port: config.port }, () => {
     console.log(`[atlasd] ${VERSION} listening on http://${config.host}:${config.port}`);
   });
+  // Module 2: build/refresh roadmaps, then follow docs, plans and commits as they change.
+  void rt.engine.syncAll().then(() => rt.engine.watchAll());
   // Catch up on anything that happened while the daemon was down.
   for (const p of rt.store.listProjects()) rt.ingestor.syncAdrs(p);
   const spooled = await rt.ingestor.drainSpool();
@@ -78,6 +102,33 @@ async function cmdAdd(config: Config, path: string | undefined): Promise<void> {
   const p = rt.ingestor.addProject(resolve(path));
   const entries = rt.store.listEntries({ projectId: p.id });
   console.log(`Added ${p.name} (${p.rootPath}) with ${entries.length} entries.`);
+}
+
+/** Fold a code repo into the project that holds its plan, via the running daemon. */
+async function cmdLink(
+  config: Config,
+  intoPath: string | undefined,
+  fromPath: string | undefined,
+): Promise<void> {
+  if (!intoPath || !fromPath) throw new Error("usage: atlas link <plan/docs folder> <code folder>");
+  const rt = await runtime(config);
+  const lookup = (path: string) => {
+    const abs = resolve(path);
+    return rt.store.projectForRoot(abs) ?? rt.ingestor.addProject(abs);
+  };
+  const into = lookup(intoPath);
+  const from = lookup(fromPath);
+  if (into.id === from.id) return console.log(`${from.name} is already part of ${into.name}.`);
+  const token = ensureToken(config);
+  const res = await fetch(`http://${config.host}:${config.port}/api/projects/${into.id}/link`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fromProjectId: from.id }),
+  }).catch(() => null);
+  if (!res?.ok) throw new Error("atlasd isn't running; start it with `atlas install`.");
+  console.log(
+    `Linking ${from.name} into ${into.name}. Atlas is rebuilding its roadmap from both folders.`,
+  );
 }
 
 async function cmdInstall(config: Config): Promise<void> {
@@ -124,7 +175,8 @@ const HELP = `atlas ${VERSION}
   atlas uninstall    remove them (keeps your data)
   atlas doctor       check the installation
   atlas backfill     process every existing Claude Code transcript
-  atlas add <path>   track a project folder and import its docs/decisions`;
+  atlas add <path>   track a project folder and import its docs/decisions
+  atlas link <docs> <code>   treat a code repo as part of the project whose plan lives in <docs>`;
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -142,6 +194,8 @@ async function main(): Promise<void> {
       return cmdBackfill(config);
     case "add":
       return cmdAdd(config, arg);
+    case "link":
+      return cmdLink(config, arg, process.argv[4]);
     default:
       console.log(HELP);
   }

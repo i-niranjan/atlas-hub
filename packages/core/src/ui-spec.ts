@@ -80,8 +80,23 @@ const KeyValue = z.object({
     .max(12),
 });
 
+/** Module 2: the live trajectory map of a project, optionally focused on a time range. */
+const TrajectoryMap = z.object({
+  type: z.literal("TrajectoryMap"),
+  projectId: z.string().min(1),
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+});
+
+const ScopeChart = z.object({
+  type: z.literal("ScopeChart"),
+  projectId: z.string().min(1),
+});
+
 export type Block =
   | z.infer<typeof DecisionCard>
+  | z.infer<typeof TrajectoryMap>
+  | z.infer<typeof ScopeChart>
   | z.infer<typeof EntryList>
   | z.infer<typeof PivotLineage>
   | z.infer<typeof ArchitectureDiagram>
@@ -105,6 +120,8 @@ export const Block: z.ZodType<Block> = z.lazy(() =>
     Callout,
     Markdown,
     KeyValue,
+    TrajectoryMap,
+    ScopeChart,
     z.object({
       type: z.literal("Section"),
       title: z.string().min(1).max(80),
@@ -124,6 +141,8 @@ export const BLOCK_TYPES = [
   "Callout",
   "Markdown",
   "KeyValue",
+  "TrajectoryMap",
+  "ScopeChart",
   "Section",
 ] as const;
 

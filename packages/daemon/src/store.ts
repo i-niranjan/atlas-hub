@@ -118,6 +118,18 @@ export class Store {
     p: { name: string; rootPath: string; gitRemote: string | null },
     at: string,
   ): Project {
+    // A folder linked into another project (module 2) belongs to that project.
+    const owner = this.projectForRoot(p.rootPath);
+    if (owner) {
+      this.db
+        .prepare(
+          `UPDATE projects SET last_active = MAX(last_active, @at),
+             git_remote = CASE WHEN root_path = @path THEN COALESCE(@remote, git_remote) ELSE git_remote END
+           WHERE id = @id`,
+        )
+        .run({ at, path: p.rootPath, remote: p.gitRemote, id: owner.id });
+      return this.getProject(owner.id)!;
+    }
     const id = projectIdFor(p.name, p.rootPath);
     this.db
       .prepare(
@@ -128,7 +140,60 @@ export class Store {
            last_active = MAX(projects.last_active, excluded.last_active)`,
       )
       .run({ id, ...p, at });
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO project_roots (path, project_id, role, added_at) VALUES (?, ?, 'primary', ?)`,
+      )
+      .run(p.rootPath, id, at);
     return this.getProjectByPath(p.rootPath)!;
+  }
+
+  projectForRoot(path: string): Project | null {
+    const r = this.db.prepare(`SELECT project_id FROM project_roots WHERE path = ?`).get(path) as
+      { project_id: string } | undefined;
+    return r ? this.getProject(r.project_id) : null;
+  }
+
+  rootsOf(projectId: string): { path: string; role: string; lastSha: string | null }[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT path, role, last_sha FROM project_roots WHERE project_id = ? ORDER BY added_at`,
+        )
+        .all(projectId) as { path: string; role: string; last_sha: string | null }[]
+    ).map((r) => ({ path: r.path, role: r.role, lastSha: r.last_sha }));
+  }
+
+  /**
+   * Fold `fromId` into `intoId`: its folders become extra roots and all of
+   * its sessions, entries and trajectory move over. The record of `fromId` is removed.
+   */
+  linkProjects(intoId: string, fromId: string): void {
+    if (intoId === fromId) return;
+    const tables = [
+      "sessions",
+      "entries",
+      "tracks",
+      "nodes",
+      "trajectory_events",
+      "lenses",
+      "project_roots",
+    ];
+    this.db.transaction(() => {
+      for (const t of tables) {
+        this.db.prepare(`UPDATE ${t} SET project_id = ? WHERE project_id = ?`).run(intoId, fromId);
+      }
+      this.db
+        .prepare(
+          `UPDATE project_roots SET role = 'linked' WHERE project_id = ? AND role = 'primary' AND path != (SELECT root_path FROM projects WHERE id = ?)`,
+        )
+        .run(intoId, intoId);
+      this.db.prepare(`DELETE FROM doc_state WHERE project_id IN (?, ?)`).run(intoId, fromId);
+      this.db
+        .prepare(`DELETE FROM link_suggestions WHERE code_project_id = ? OR docs_project_id = ?`)
+        .run(fromId, fromId);
+      this.db.prepare(`DELETE FROM projects WHERE id = ?`).run(fromId);
+    })();
   }
 
   getProject(id: string): Project | null {

@@ -5,6 +5,8 @@ import { loadConfig } from "./config.ts";
 import { Ingestor } from "./ingest/ingestor.ts";
 import { REPO_ROOT } from "./install.ts";
 import { Mirror } from "./mirror.ts";
+import { PlanEngine } from "./plan/engine.ts";
+import { TrajectoryStore } from "./plan/store.ts";
 import { createApp } from "./server.ts";
 import { memoryStore, tempDir } from "./test-helpers.ts";
 
@@ -25,7 +27,18 @@ function app() {
     log: () => undefined,
   });
   ingestor.addProject(REPO_ROOT);
+  const trajectory = new TrajectoryStore(store.db);
+  const engine = new PlanEngine({
+    store,
+    trajectory,
+    bus,
+    plansDir: home,
+    extractor: () => null,
+    log: () => undefined,
+  });
   const a = createApp({
+    trajectory,
+    engine,
     config,
     store,
     bus,
@@ -129,6 +142,7 @@ describe("HTTP API", () => {
     expect(list.result.tools!.map((t) => t.name).sort()).toEqual([
       "atlas_check",
       "atlas_decisions",
+      "atlas_heading",
       "atlas_log_decision",
       "atlas_search",
       "atlas_why",

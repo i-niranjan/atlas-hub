@@ -8,10 +8,15 @@ import {
   type CanvasState,
   type EntryDetail,
   type ProjectSummary,
+  type TrajectoryData,
+  heading,
+  projectAt,
+  scopeSize,
 } from "@atlas/core";
 import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import type { TrajectoryStore } from "./plan/store.ts";
 import type { Store } from "./store.ts";
 
 /**
@@ -31,6 +36,7 @@ Composing the view:
 - PivotLineage for "how did X evolve / why did we change". DecisionCard for one key decision. EntryList for several related ones. OpenQuestions for unresolved questions.
 - ArchitectureDiagram only when architecture entries describe components and how they connect. Build the Mermaid flowchart strictly from those entries and list them in sourceEntryIds. Use graph TD unless the flow is a simple chain of four nodes or fewer; keep node labels to two or three words and edge labels to one or two. Put caveats about the diagram in its caption, not in your reply.
 - OptionsCompare only when an entry's recorded alternatives support it; set sourceEntryId.
+- TrajectoryMap for "where are we heading / what's the plan / how far along"; ScopeChart for "how did scope change". Use get_trajectory first to know what's there.
 - Section groups related blocks under a heading. Callout (info) for a short note, e.g. that something is not recorded.
 - Prefer 1-4 blocks. Lead with the most direct answer.
 - Say each thing once. Your reply sentences already sit above the view, so never add a Callout or Markdown block that restates them.
@@ -84,6 +90,17 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: "get_trajectory",
+    description:
+      "Where a project is heading: current direction, goal, current milestone and story, scope size, upcoming milestones, abandoned directions with reasons.",
+    input_schema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "render_view",
     description: `Render the answer as a view. blocks is an array of objects, each with a "type" from: ${BLOCK_TYPES.join(", ")}.
 Shapes:
@@ -97,6 +114,8 @@ Shapes:
 - {type:"Callout", tone:"info"|"warning", text}
 - {type:"Markdown", text}
 - {type:"KeyValue", items:[{label, value}]}
+- {type:"TrajectoryMap", projectId, from?:"yyyy-mm-dd", to?:"yyyy-mm-dd"}: the live roadmap map with pivots
+- {type:"ScopeChart", projectId}: planned-work size over time
 - {type:"Section", title, blocks:[...]}`,
     input_schema: {
       type: "object",
@@ -115,6 +134,7 @@ const STEP_LABELS: Record<string, string> = {
   list_entries: "Reading decisions",
   search_entries: "Searching decisions",
   get_entry: "Reading details",
+  get_trajectory: "Reading the roadmap",
   render_view: "Composing view",
 };
 
@@ -174,6 +194,7 @@ function pruneUnknown(blocks: Block[], known: Set<string>, dropped: string[]): B
 export function resolveView(
   store: Store,
   input: unknown,
+  trajectory?: TrajectoryStore,
 ): { state: CanvasState } | { error: string } {
   const v = validateView(input);
   if ("error" in v) return { error: v.error };
@@ -210,10 +231,20 @@ export function resolveView(
     }
   }
   if (!blocks.length) return { error: `every block was invalid: ${dropped.join("; ")}` };
-  return { state: { view: { title: v.title, blocks }, entries, projects, dropped } };
+  const trajectories: Record<string, TrajectoryData> = {};
+  const visitT = (b: Block): void => {
+    if ((b.type === "TrajectoryMap" || b.type === "ScopeChart") && trajectory) {
+      trajectories[b.projectId] ??= trajectory.data(b.projectId);
+      const p = all.find((x) => x.id === b.projectId);
+      if (p) projects[p.id] = p;
+    }
+    if (b.type === "Section") b.blocks.forEach(visitT);
+  };
+  blocks.forEach(visitT);
+  return { state: { view: { title: v.title, blocks }, entries, projects, trajectories, dropped } };
 }
 
-function runTool(store: Store, name: string, input: unknown): string {
+function runTool(store: Store, name: string, input: unknown, trajectory?: TrajectoryStore): string {
   const args = (input ?? {}) as Record<string, string | undefined>;
   switch (name) {
     case "list_projects":
@@ -235,6 +266,32 @@ function runTool(store: Store, name: string, input: unknown): string {
       );
     case "search_entries":
       return JSON.stringify(store.search(args.query ?? "", args.projectId, 20).map(compact));
+    case "get_trajectory": {
+      if (!trajectory || !trajectory.hasTrajectory(args.projectId ?? ""))
+        return "No trajectory recorded for this project.";
+      const data = trajectory.data(args.projectId!);
+      const now = new Date().toISOString();
+      const state = projectAt(data, now);
+      const h = heading(state);
+      return JSON.stringify({
+        direction: h.track?.name ?? null,
+        goal: h.goal?.title ?? null,
+        now: { milestone: h.now.milestone?.title ?? null, story: h.now.story?.title ?? null },
+        scope: scopeSize(state),
+        upcoming: h.milestones.map((m) => ({
+          title: m.node.title,
+          key: m.node.key,
+          done: m.done,
+          total: m.total,
+        })),
+        abandoned: h.abandoned.map((t) => ({ name: t.name, reason: t.reason })),
+        tracks: state.tracks.map((t) => ({
+          name: t.name,
+          status: t.status,
+          since: t.createdAt.slice(0, 10),
+        })),
+      });
+    }
     case "get_entry": {
       const d = store.entryDetail(args.entryId ?? "");
       return d
@@ -254,6 +311,7 @@ function runTool(store: Store, name: string, input: unknown): string {
 
 export interface AgentDeps {
   store: Store;
+  trajectory?: TrajectoryStore;
   apiKey: string | null;
   model: string;
 }
@@ -342,7 +400,7 @@ export function runCanvas(input: RunAgentInput, deps: AgentDeps): ReadableStream
             if (use.name === "render_view") {
               const parsed = ViewInput.safeParse(use.input);
               const resolved = parsed.success
-                ? resolveView(deps.store, parsed.data)
+                ? resolveView(deps.store, parsed.data, deps.trajectory)
                 : { error: "title and blocks are required" };
               if ("error" in resolved) {
                 result = `View rejected: ${resolved.error}. Fix it and call render_view again.`;
@@ -355,7 +413,7 @@ export function runCanvas(input: RunAgentInput, deps: AgentDeps): ReadableStream
                   : "Rendered.";
               }
             } else {
-              result = runTool(deps.store, use.name, use.input);
+              result = runTool(deps.store, use.name, use.input, deps.trajectory);
             }
             send({ type: EventType.STEP_FINISHED, stepName: label } as BaseEvent);
             results.push({

@@ -15,5 +15,23 @@ export const Candidate = z.object({
 });
 export type Candidate = z.infer<typeof Candidate>;
 
-export const CandidateBatch = z.object({ entries: z.array(Candidate) });
+/** Module 2: movement on the project's trajectory, read from the same turns. */
+export const ProgressItem = z.object({
+  action: z.enum(["started", "done", "dropped", "blocked", "added", "pivot"]),
+  /** Existing node id for started/done/dropped/blocked. */
+  nodeId: z.string().nullable(),
+  /** For "added": the new story's title. For "pivot": the new direction's name. */
+  title: z.string(),
+  /** For "added": the milestone it belongs to, if any. */
+  milestoneId: z.string().nullable(),
+  reason: z.string().nullable(),
+  confidence: z.number(),
+  evidence: z.array(z.object({ turnUuid: z.string(), quote: z.string() })),
+});
+export type ProgressItem = z.infer<typeof ProgressItem>;
+
+export const CandidateBatch = z.object({
+  entries: z.array(Candidate),
+  progress: z.array(ProgressItem),
+});
 export type CandidateBatch = z.infer<typeof CandidateBatch>;
