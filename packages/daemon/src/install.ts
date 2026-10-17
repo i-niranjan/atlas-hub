@@ -26,6 +26,19 @@ const LOG_DIR = join(homedir(), "Library", "Logs", "Atlas");
 const HOOK_EVENTS = ["SessionEnd", "PreCompact", "Stop"] as const;
 const HOOK_MARKER = "atlas-hook.mjs";
 
+/**
+ * Homebrew's versioned Cellar path disappears on `brew upgrade`; the
+ * `opt/<formula>` symlink survives it. Installed paths must use the latter.
+ */
+export function stableNodePath(execPath = process.execPath): string {
+  const m = /^(.*)\/Cellar\/([^/]+)\/[^/]+\/bin\/node$/.exec(execPath);
+  if (!m) return execPath;
+  const stable = `${m[1]}/opt/${m[2]}/bin/node`;
+  return existsSync(stable) ? stable : execPath;
+}
+
+const NODE = stableNodePath();
+
 export function ensureToken(config: Config): string {
   if (existsSync(config.tokenPath)) return readFileSync(config.tokenPath, "utf8").trim();
   mkdirSync(config.dataDir, { recursive: true });
@@ -63,9 +76,11 @@ export function hooksInstalled(config: Config): boolean {
 export function installHooks(config: Config): string {
   const path = config.claudeSettingsPath;
   const settings = readSettings(path);
-  if (existsSync(path)) copyFileSync(path, `${path}.atlas-backup`);
+  // Keep the first backup: it is the user's settings from before Atlas touched them.
+  if (existsSync(path) && !existsSync(`${path}.atlas-backup`))
+    copyFileSync(path, `${path}.atlas-backup`);
   const hooks = (settings.hooks ?? {}) as Record<string, HookGroup[]>;
-  const command = `"${process.execPath}" "${HOOK_SCRIPT}"`;
+  const command = `"${NODE}" "${HOOK_SCRIPT}"`;
   for (const ev of HOOK_EVENTS) {
     const groups = (hooks[ev] ?? []).filter(
       (g) => !g.hooks?.some((h) => h.command.includes(HOOK_MARKER)),
@@ -144,7 +159,7 @@ function plist(): string {
   <key>Label</key><string>${LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${esc(process.execPath)}</string>
+    <string>${esc(NODE)}</string>
     <string>${esc(CLI_SCRIPT)}</string>
     <string>serve</string>
   </array>
@@ -155,7 +170,7 @@ function plist(): string {
   <key>StandardErrorPath</key><string>${esc(join(LOG_DIR, "atlasd.log"))}</string>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>${esc(`${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`)}</string>
+    <key>PATH</key><string>${esc(`${dirname(NODE)}:/usr/bin:/bin:/usr/sbin:/sbin`)}</string>
   </dict>
 </dict>
 </plist>
@@ -171,6 +186,15 @@ export async function installLaunchAgent(): Promise<void> {
   mkdirSync(dirname(PLIST), { recursive: true });
   const domain = `gui/${process.getuid?.() ?? 501}`;
   await run("launchctl", ["bootout", `${domain}/${LABEL}`]).catch(() => undefined);
+  // bootout returns before the job is gone; bootstrapping too early fails with EIO.
+  for (let i = 0; i < 50; i++) {
+    const loaded = await run("launchctl", ["print", `${domain}/${LABEL}`]).then(
+      () => true,
+      () => false,
+    );
+    if (!loaded) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
   writeFileSync(PLIST, plist());
   await run("launchctl", ["bootstrap", domain, PLIST]);
 }

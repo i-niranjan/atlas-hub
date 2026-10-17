@@ -4,11 +4,10 @@ A local macOS hub that captures the decisions, architecture and pivots made in C
 
 ## Layout
 
-- `packages/core`: shared zod schemas (`Entry`, `Project`, `Session`). Every other package depends on these. Change them deliberately.
-- `packages/daemon`: `atlasd` (ingest, extract, store, AG-UI endpoint, MCP server, CLI). _(M1+)_
-- `packages/hook`: dependency-free `atlas-hook` script for Claude Code hooks. _(M1)_
-- `packages/ui`: design system shared by deterministic and generative views. _(M4)_
-- `apps/desktop`: Tauri 2 + React app. _(M4)_
+- `packages/core`: shared zod schemas (`Entry`, `Project`, `Session`), the generative UI contract (`ui-spec.ts`) and API types. Every other package depends on these. Change them deliberately.
+- `packages/daemon`: `atlasd`, run directly by Node 22 type stripping (no build step, so only erasable TS syntax). `ingest/` (transcript parser, ingestor), `extract/` (prompt, LLM call, evidence verification, reconciliation), `store.ts`, `agent.ts` (AG-UI canvas), `mcp.ts`, `server.ts`, `install.ts`, `cli.ts`.
+- `packages/hook`: dependency-free `atlas-hook.mjs` that Claude Code runs on SessionEnd, PreCompact and Stop.
+- `apps/desktop`: Tauri 2 shell (`src-tauri/`) plus React UI. `components/Blocks.tsx` renders agent-composed views, and the Inspector reuses the same parts.
 
 ## Commands
 
@@ -16,9 +15,13 @@ A local macOS hub that captures the decisions, architecture and pivots made in C
 pnpm install
 pnpm check        # typecheck + lint + format check + tests; run before every commit
 pnpm test         # vitest
+node packages/daemon/src/cli.ts doctor            # is capture healthy?
+pnpm --filter @atlas/desktop app:dev              # app with hot reload
 ```
 
-Toolchain: Node 22 (`/opt/homebrew/opt/node@22`), pnpm 12, Rust stable via rustup. TypeScript is pinned to 6.0 (see ADR 0009).
+The installed daemon runs under launchd (`co.atlas.daemon`, logs in `~/Library/Logs/Atlas/atlasd.log`). After changing daemon code, restart it with `launchctl kickstart -k gui/$(id -u)/co.atlas.daemon`.
+
+Toolchain: Node 22 (`/opt/homebrew/opt/node@22`), pnpm 12, Rust stable via rustup. TypeScript is pinned to 6.0 (ADR 0009). App builds pin the macOS 26.5 SDK (ADR 0011).
 
 ## Conventions
 
@@ -36,7 +39,7 @@ When a session makes or changes a design decision for Atlas, add an entry to `do
 - Agent-made decisions without user agreement get `review: needs_review`.
 - Never rewrite an old record. Supersede it with a new one (`kind: pivot`, `supersedes: <id>`) and mark the old one `superseded`.
 
-Once M3 lands, use the Atlas MCP tools (`atlas_log_decision`, `atlas_check`) instead.
+The Atlas MCP server is installed: before changing a design decision, call `atlas_check`, and use `atlas_why` to see why something is the way it is.
 
 ## Product quality bar
 
