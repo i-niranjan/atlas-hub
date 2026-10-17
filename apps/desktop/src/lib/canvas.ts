@@ -60,6 +60,11 @@ export function useCanvas() {
               return { ...r, steps };
             });
           },
+          // Only the latest message is the answer; earlier ones are narration between tool calls.
+          onTextMessageStartEvent: () => {
+            if (!isCurrent()) return;
+            setRun((r) => ({ ...r, answer: "" }));
+          },
           onTextMessageContentEvent: ({ event }) => {
             if (!isCurrent()) return;
             setRun((r) => ({ ...r, answer: r.answer + event.delta }));

@@ -181,9 +181,20 @@ function ApiKeySection({ hasKey, waiting }: { hasKey: boolean; waiting: number }
               placeholder="sk-ant-…"
               autoFocus
               aria-label="Anthropic API key"
-              className="t-body h-[28px] flex-1 rounded-[6px] px-2.5 font-mono outline-none focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_45%,transparent)]"
-              style={{ background: "var(--control)", boxShadow: "var(--shadow-card)" }}
+              className="field t-body h-[28px] min-w-0 flex-1 px-2.5 font-mono outline-none"
             />
+            {hasKey && (
+              <Button
+                size="large"
+                style={{ height: 28 }}
+                onClick={() => {
+                  setKey("");
+                  setEditing(false);
+                }}
+              >
+                Cancel
+              </Button>
+            )}
             <Button
               type="submit"
               variant="primary"

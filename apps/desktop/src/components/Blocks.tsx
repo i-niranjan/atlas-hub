@@ -90,16 +90,9 @@ function BlockView({ block, state }: { block: Block; state: CanvasState }): Reac
             </p>
           )}
           {block.sourceEntryIds.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-              {block.sourceEntryIds.map((id) => {
-                const src = e(id);
-                return src ? (
-                  <OpenLink key={id} id={id}>
-                    {src.title}
-                  </OpenLink>
-                ) : null;
-              })}
-            </div>
+            <SourceChips
+              entries={block.sourceEntryIds.map(e).filter((x): x is EntryDetail => !!x)}
+            />
           )}
         </Card>
       );
@@ -208,6 +201,32 @@ function BlockView({ block, state }: { block: Block; state: CanvasState }): Reac
         </section>
       );
   }
+}
+
+/** Compact, evenly wrapping references back to the entries a block was built from. */
+function SourceChips({ entries }: { entries: EntryDetail[] }) {
+  const { openEntry } = useNav();
+  if (!entries.length) return null;
+  return (
+    <div className="mt-4 pt-3" style={{ borderTop: "0.5px solid var(--separator)" }}>
+      <div className="t-section mb-2">Based on</div>
+      <div className="flex flex-wrap gap-1.5">
+        {entries.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            onClick={() => openEntry(x.id)}
+            title={x.title}
+            className="t-callout inline-flex h-[24px] max-w-[280px] items-center gap-1.5 rounded-[6px] pr-2 pl-1 hover:bg-[var(--fill-2)]"
+            style={{ background: "var(--fill)" }}
+          >
+            <KindGlyph kind={x.kind} size={16} />
+            <span className="truncate">{x.title}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function DecisionCard({
@@ -385,12 +404,53 @@ function Mermaid({ source }: { source: string }) {
     let cancelled = false;
     const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     void import("mermaid").then(async ({ default: mermaid }) => {
+      // Mermaid needs literal colours, so mirror the design tokens for each scheme.
+      const t = dark
+        ? {
+            fill: "#2c2c2e",
+            border: "#48484a",
+            text: "#ebebf0",
+            line: "#7c7c80",
+            label: "#a1a1a6",
+            card: "#262628",
+          }
+        : {
+            fill: "#f5f5f7",
+            border: "#d1d1d6",
+            text: "#1d1d1f",
+            line: "#a1a1a6",
+            label: "#6e6e73",
+            card: "#ffffff",
+          };
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: "strict",
-        theme: dark ? "dark" : "neutral",
+        theme: "base",
         fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
-        flowchart: { curve: "basis", padding: 12 },
+        themeVariables: {
+          darkMode: dark,
+          fontSize: "13px",
+          background: t.card,
+          primaryColor: t.fill,
+          primaryBorderColor: t.border,
+          primaryTextColor: t.text,
+          secondaryColor: t.fill,
+          tertiaryColor: t.fill,
+          lineColor: t.line,
+          textColor: t.label,
+          edgeLabelBackground: t.card,
+          clusterBkg: "transparent",
+          clusterBorder: t.border,
+        },
+        flowchart: {
+          curve: "basis",
+          padding: 14,
+          nodeSpacing: 36,
+          rankSpacing: 48,
+          htmlLabels: true,
+          // Fixed pixel size: render 1:1 instead of stretching to the card.
+          useMaxWidth: false,
+        },
       });
       try {
         const { svg } = await mermaid.render(`m${id}`, source);
@@ -420,7 +480,7 @@ function Mermaid({ source }: { source: string }) {
     );
   }
   if (!svg) return <div className="skeleton h-40" />;
-  return <div className="diagram flex justify-center" dangerouslySetInnerHTML={{ __html: svg }} />;
+  return <div className="diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 // ── Markdown (deliberately tiny: paragraphs, lists, bold, code) ─────────────
@@ -443,7 +503,7 @@ function inline(text: string): ReactNode[] {
   });
 }
 
-function Markdown({ text }: { text: string }) {
+export function Markdown({ text }: { text: string }) {
   return (
     <div className="selectable t-body space-y-2.5">
       {text.split(/\n{2,}/).map((para, i) => {

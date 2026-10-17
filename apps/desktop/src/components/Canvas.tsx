@@ -2,7 +2,7 @@ import { ArrowLeft, Check, KeyRound, Pin, RotateCcw, Sparkles } from "lucide-rea
 import { motion } from "motion/react";
 import { useState } from "react";
 import type { CanvasRun } from "../lib/canvas.ts";
-import { ViewRenderer } from "./Blocks.tsx";
+import { Markdown, ViewRenderer } from "./Blocks.tsx";
 import { Button, Spinner } from "./ui.tsx";
 
 export function Canvas({
@@ -101,14 +101,14 @@ export function Canvas({
         )}
 
         {run.answer && (
-          <motion.p
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="selectable mb-6 text-[15px] leading-[22px]"
+            className="mb-6 text-[15px] leading-[22px] [&_.t-body]:text-[15px] [&_.t-body]:leading-[22px]"
             aria-live="polite"
           >
-            {run.answer}
-          </motion.p>
+            <Markdown text={run.answer} />
+          </motion.div>
         )}
 
         {run.state && <ViewRenderer state={run.state} />}

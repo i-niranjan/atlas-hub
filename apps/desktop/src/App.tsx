@@ -88,7 +88,10 @@ export function App() {
   useEffect(() => {
     if (selection || !projects?.length) return;
     const stored = readStoredProject();
-    const p = projects.find((x) => x.id === stored) ?? projects[0]!;
+    const p =
+      projects.find((x) => x.id === stored) ??
+      projects.find((x) => x.counts.total > 0) ??
+      projects[0]!;
     setSelection({ kind: "project", projectId: p.id });
   }, [projects, selection]);
 

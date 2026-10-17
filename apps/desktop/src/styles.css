@@ -134,6 +134,26 @@ button {
   border-radius: 6px;
 }
 
+/* Text fields: AppKit-style focus ring that hugs the field instead of a
+   generic outline drawn outside it. */
+.field {
+  background: var(--control);
+  box-shadow: var(--shadow-card);
+  border-radius: 6px;
+  transition: box-shadow 120ms ease;
+}
+.field:focus,
+.field:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 80%, transparent),
+    0 0 0 3.5px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
@@ -249,8 +269,37 @@ button {
 }
 
 /* Mermaid output inherits the system font and adapts to the theme. */
+/* Keep diagrams at their natural size so labels stay legible; scroll if wider than the card. */
+.diagram {
+  overflow-x: auto;
+}
 .diagram svg {
-  max-width: 100%;
-  height: auto;
+  display: block;
+  margin: 0 auto;
+  max-width: none !important;
   font-family: var(--font-text) !important;
+}
+.diagram .node rect,
+.diagram .node polygon,
+.diagram .node path {
+  stroke-width: 1px !important;
+  filter: none !important;
+}
+.diagram .node rect {
+  rx: 8px;
+  ry: 8px;
+}
+.diagram .flowchart-link {
+  stroke-width: 1.25px !important;
+}
+.diagram .edgeLabel,
+.diagram .edgeLabel p,
+.diagram .labelBkg {
+  font-size: 11px;
+  color: var(--label-2) !important;
+}
+.diagram .edgeLabel rect,
+.diagram .labelBkg {
+  opacity: 1;
+  border-radius: 4px;
 }

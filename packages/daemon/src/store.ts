@@ -161,7 +161,9 @@ export class Store {
            (SELECT COUNT(*) FROM entries e WHERE e.project_id = p.id AND e.status = 'active' AND e.review_state != 'dismissed') AS active,
            (SELECT COUNT(*) FROM entries e WHERE e.project_id = p.id AND e.review_state = 'needs_review') AS needs_review,
            (SELECT COUNT(*) FROM entries e WHERE e.project_id = p.id AND e.review_state != 'dismissed') AS total,
-           (SELECT COUNT(*) FROM sessions s WHERE s.project_id = p.id) AS session_count
+           (SELECT COUNT(*) FROM sessions s WHERE s.project_id = p.id
+             OR s.id IN (SELECT ev.session_id FROM evidence ev JOIN entries e ON e.id = ev.entry_id WHERE e.project_id = p.id)
+           ) AS session_count
          FROM projects p ORDER BY p.last_active DESC`,
       )
       .all() as (ProjectRow & {
