@@ -5,9 +5,10 @@ import { longDate, shortDate } from "../lib/format.ts";
 import { KindGlyph, kindMeta, Pill, StatusPill } from "./ui.tsx";
 
 /** Lets any block open an entry in the inspector, wherever it is rendered. */
-export const NavContext = createContext<{ openEntry: (id: string) => void }>({
-  openEntry: () => undefined,
-});
+export const NavContext = createContext<{
+  openEntry: (id: string) => void;
+  openNode: (id: string) => void;
+}>({ openEntry: () => undefined, openNode: () => undefined });
 export const useNav = () => useContext(NavContext);
 
 export function SectionTitle({ children }: { children: ReactNode }) {

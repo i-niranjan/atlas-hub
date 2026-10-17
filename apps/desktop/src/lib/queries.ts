@@ -10,6 +10,8 @@ export const keys = {
   entries: (projectId: string) => ["entries", projectId] as const,
   entry: (id: string) => ["entry", id] as const,
   review: ["review"] as const,
+  trajectory: (projectId: string) => ["trajectory", projectId] as const,
+  links: ["links"] as const,
 };
 
 export const useStatus = () => useQuery({ queryKey: keys.status, queryFn: api.status });
@@ -25,6 +27,14 @@ export const useEntries = (projectId: string | null) =>
 export const useEntry = (id: string | null) =>
   useQuery({ queryKey: keys.entry(id ?? ""), queryFn: () => api.entry(id!), enabled: !!id });
 export const useReviewQueue = () => useQuery({ queryKey: keys.review, queryFn: api.reviewQueue });
+export const useTrajectory = (projectId: string | null) =>
+  useQuery({
+    queryKey: keys.trajectory(projectId ?? ""),
+    queryFn: () => api.trajectory(projectId!),
+    enabled: !!projectId,
+  });
+export const useLinkSuggestions = () =>
+  useQuery({ queryKey: keys.links, queryFn: api.linkSuggestions });
 
 export type LiveState = "connecting" | "live" | "offline";
 
@@ -68,12 +78,23 @@ export function useLiveUpdates(): { state: LiveState; fresh: Set<string> } {
             void client.invalidateQueries({ queryKey: keys.project(ev.projectId) });
             void client.invalidateQueries({ queryKey: keys.status });
             break;
+          case "trajectory.changed":
+            void client.invalidateQueries({ queryKey: keys.trajectory(ev.projectId) });
+            void client.invalidateQueries({ queryKey: ["node"] });
+            break;
           case "status.changed":
             void client.invalidateQueries({ queryKey: keys.status });
+            void client.invalidateQueries({ queryKey: keys.links });
             break;
         }
       };
-      for (const t of ["entry.changed", "project.changed", "session.changed", "status.changed"]) {
+      for (const t of [
+        "entry.changed",
+        "project.changed",
+        "session.changed",
+        "status.changed",
+        "trajectory.changed",
+      ]) {
         source.addEventListener(t, handle);
       }
     });

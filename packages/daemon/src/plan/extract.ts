@@ -50,8 +50,8 @@ A track is one coherent direction for the project. Usually there is one active t
 - goal: one per track, the outcome the track aims for, in a single line.
 - milestone: the stages, in order (use the documents' own ids as key, e.g. "H2", "M3").
 - story: the work items under a milestone (key = the documents' id, e.g. "CH-014"; parentRef = the milestone's ref).
-For an abandoned track, give only its goal and at most 8 milestones, no stories.
-List nodes in the documents' order. Titles: at most 70 characters, specific, no ids repeated in the title.
+For an abandoned track, give its goal and its main milestones or phases (3 to 8, in order) so the map can show what was originally planned; no stories.
+Include every milestone and story the current plan lists; never sample or summarise a backlog. List nodes in the documents' order. Titles: at most 70 characters, specific, no ids repeated in the title.
 
 # Status
 Only from explicit statements: progress tables, resume or status notes, checkmarks, "done", "complete", "in progress", "dropped", "blocked". A plan saying what will be built is "planned". Never infer progress.
@@ -67,6 +67,8 @@ For every document given, say whether it is the current plan, a superseded plan,
 
 export interface PlanInput {
   projectName: string;
+  /** Ids the previous attempt left out; the model is asked to include them. */
+  missingKeys?: string[];
   docs: Doc[];
   tracks: Track[];
   nodes: TNode[];
@@ -88,7 +90,10 @@ export function renderPlanInput(input: PlanInput): string {
         `<doc path="${d.label}" modified="${d.modifiedAt.slice(0, 10)}"${d.supersededHint ? ' location_hint="archive"' : ""}>\n${d.text}\n</doc>`,
     )
     .join("\n\n");
-  return `<project>${input.projectName}</project>\n\n<existing_items>\n${existing}\n</existing_items>\n\n${docs}`;
+  const missing = input.missingKeys?.length
+    ? `\n\n<completeness note="A previous pass left these ids out. Include every one of them, plus everything else.">${input.missingKeys.join(", ")}</completeness>`
+    : "";
+  return `<project>${input.projectName}</project>${missing}\n\n<existing_items>\n${existing}\n</existing_items>\n\n${docs}`;
 }
 
 export interface PlanExtractor {
@@ -120,4 +125,19 @@ export class AnthropicPlanExtractor implements PlanExtractor {
     const text = message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
     return PlanExtraction.parse(JSON.parse(text));
   }
+}
+
+/** Ids documented at least twice (defined, not just mentioned) but absent from the extraction. */
+export function missingKeys(docs: Doc[], x: PlanExtraction): string[] {
+  const counts = new Map<string, number>();
+  for (const d of docs) {
+    if (d.supersededHint) continue;
+    for (const m of d.text.matchAll(/(?<![A-Za-z0-9-])([A-Z]{1,6}-\d{2,5})(?![A-Za-z0-9])/g))
+      counts.set(m[1]!, (counts.get(m[1]!) ?? 0) + 1);
+  }
+  const got = new Set(x.nodes.map((n) => n.key?.toUpperCase()).filter(Boolean));
+  return [...counts]
+    .filter(([k, n]) => n >= 2 && !got.has(k))
+    .map(([k]) => k)
+    .sort();
 }

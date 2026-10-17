@@ -2,6 +2,9 @@ import type {
   Entry,
   EntryDetail,
   Lens,
+  LinkSuggestion,
+  NodeDetail,
+  TrajectoryData,
   ProjectSummary,
   ReviewState,
   StatusReport,
@@ -105,6 +108,27 @@ export const api = {
     request<{ id: string }>("/api/lenses", {
       method: "POST",
       body: JSON.stringify({ projectId, title, prompt }),
+    }),
+  trajectory: (projectId: string) =>
+    request<TrajectoryData>(`/api/projects/${projectId}/trajectory`),
+  refreshTrajectory: (projectId: string) =>
+    request<{ ok: true }>(`/api/projects/${projectId}/trajectory/refresh`, { method: "POST" }),
+  node: (id: string) => request<NodeDetail>(`/api/nodes/${encodeURIComponent(id)}`),
+  reviewNode: (id: string, state: "confirmed" | "dismissed") =>
+    request<{ ok: true }>(`/api/nodes/${encodeURIComponent(id)}/review`, {
+      method: "POST",
+      body: JSON.stringify({ state }),
+    }),
+  linkSuggestions: () => request<LinkSuggestion[]>("/api/link-suggestions"),
+  link: (intoId: string, fromProjectId: string) =>
+    request<{ ok: true }>(`/api/projects/${intoId}/link`, {
+      method: "POST",
+      body: JSON.stringify({ fromProjectId }),
+    }),
+  dismissSuggestion: (codeId: string, docsId: string) =>
+    request<{ ok: true }>("/api/link-suggestions/dismiss", {
+      method: "POST",
+      body: JSON.stringify({ codeId, docsId }),
     }),
   deleteLens: (id: string) => request<{ ok: true }>(`/api/lenses/${id}`, { method: "DELETE" }),
 };

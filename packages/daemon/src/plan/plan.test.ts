@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Turn } from "../ingest/transcript.ts";
 import { memoryStore, NOW, seedProject, tempDir } from "../test-helpers.ts";
 import { attributePlan, findDocs, type Doc } from "./docs.ts";
-import type { PlanExtraction } from "./extract.ts";
+import { missingKeys, type PlanExtraction } from "./extract.ts";
 import { applyCommits, keyPattern, readCommits, referencedForeignKeys } from "./git.ts";
 import { advances, applyPlan } from "./reconcile.ts";
 import { applyProgress, renderTrajectory } from "./session.ts";
@@ -164,6 +164,22 @@ describe("applyPlan", () => {
     expect(h.now.story?.key).toBe("CH-002");
   });
 
+  it("dates a replaced plan before its successor and keeps its items planned", () => {
+    const { project, t } = setup();
+    const x = extraction();
+    // The model marks the old plan's milestone dropped and dates it after the new plan.
+    x.nodes[0] = { ...x.nodes[0]!, status: "dropped" };
+    x.docs[1] = { ...x.docs[1]!, date: "2026-10-20" };
+    applyPlan(x, { store: t, projectId: project.id, docs, now: NOW });
+    const data = t.data(project.id);
+    const cloud = data.tracks.find((tr) => tr.name === "Python cloud platform")!;
+    const harness = data.tracks.find((tr) => tr.name === "Coding harness")!;
+    expect(cloud.createdAt < harness.createdAt).toBe(true);
+    const c1 = data.nodes.find((n) => n.trackId === cloud.id && n.kind === "milestone")!;
+    expect(t.currentStatus(c1.id)).toBe("planned");
+    expect(c1.createdAt >= cloud.createdAt).toBe(true);
+  });
+
   it("uses the document's stated date for when the plan appeared", () => {
     const { project, t } = setup();
     applyPlan(extraction(), { store: t, projectId: project.id, docs, now: NOW });
@@ -193,6 +209,16 @@ describe("applyPlan", () => {
     applyPlan(renamed, { store: t, projectId: project.id, docs, now: NOW });
     const ch2 = t.data(project.id).nodes.filter((n) => n.key === "CH-002");
     expect(ch2.map((n) => n.title)).toEqual(["Model and tool round-trip"]);
+  });
+});
+
+describe("missingKeys", () => {
+  it("finds ids the current docs define but the extraction skipped, ignoring archives", () => {
+    const d: Doc[] = [
+      { ...docs[0]!, text: "CH-001 a. CH-001 done. CH-007 b. CH-007 c. CH-009 mentioned once." },
+      { ...docs[1]!, text: "OLD-001 x. OLD-001 y." },
+    ];
+    expect(missingKeys(d, extraction())).toEqual(["CH-007"]);
   });
 });
 
@@ -340,7 +366,7 @@ describe("session progress", () => {
         now: "2026-10-13T12:00:00.000Z",
       },
     );
-    expect(n).toBe(3);
+    expect(n.changes).toBe(3);
     expect(t.currentStatus(id("CH-002"))).toBe("done");
     expect(t.node(id("CH-003"))!.reviewState).toBe("needs_review");
     const added = t.data(project.id).nodes.find((x) => x.title === "Retry failed model calls")!;
@@ -386,6 +412,29 @@ describe("session progress", () => {
     const text = renderTrajectory(t.data(project.id), NOW)!;
     expect(text).toMatch(/^Active direction: Coding harness/);
     expect(text).toContain("| CH-002 | Model round-trip | planned");
+  });
+});
+
+describe("cross-project progress", () => {
+  it("updates another project's roadmap when the session was shown it", () => {
+    const { store, project, t } = setup();
+    applyPlan(extraction(), { store: t, projectId: project.id, docs, now: NOW });
+    const elsewhere = seedProject(store, "/tmp/elsewhere", "elsewhere");
+    const id = t.data(project.id).nodes.find((n) => n.key === "CH-002")!.id;
+    const item = {
+      action: "done" as const,
+      nodeId: id,
+      title: "",
+      milestoneId: null,
+      reason: null,
+      confidence: 0.9,
+      evidence: [{ turnUuid: "u1", quote: "CH-002 is done" }],
+    };
+    const turns: Turn[] = [{ uuid: "u1", role: "user", text: "CH-002 is done", timestamp: NOW }];
+    const ctx = { store: t, projectId: elsewhere.id, sessionId: "s", newTurns: turns, now: NOW };
+    expect(applyProgress([item], ctx).changes).toBe(0);
+    const res = applyProgress([item], { ...ctx, projectIds: [elsewhere.id, project.id] });
+    expect(res).toEqual({ changes: 1, projects: [project.id] });
   });
 });
 

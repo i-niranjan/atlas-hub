@@ -3,7 +3,7 @@ import { existsSync, watch, type FSWatcher } from "node:fs";
 import type { Bus } from "../bus.ts";
 import type { Store } from "../store.ts";
 import { collectDocs, hashDocs } from "./docs.ts";
-import type { PlanExtractor } from "./extract.ts";
+import { missingKeys, type PlanExtractor } from "./extract.ts";
 import { applyCommits, readCommits, referencedForeignKeys } from "./git.ts";
 import { applyPlan } from "./reconcile.ts";
 import type { TrajectoryStore } from "./store.ts";
@@ -86,12 +86,17 @@ export class PlanEngine {
     if (!extractor) return;
     const data = trajectory.data(projectId);
     this.log(`trajectory: reading ${docs.length} docs for ${project.name}`);
-    const extraction = await extractor.extract({
-      projectName: project.name,
-      docs,
-      tracks: data.tracks,
-      nodes: data.nodes,
-    });
+    const input = { projectName: project.name, docs, tracks: data.tracks, nodes: data.nodes };
+    let extraction = await extractor.extract(input);
+    // Long backlogs sometimes come back abbreviated; ask once more for what's missing.
+    const missing = missingKeys(docs, extraction);
+    if (missing.length) {
+      this.log(
+        `trajectory: ${project.name}: ${missing.length} documented ids missing, asking again`,
+      );
+      const retry = await extractor.extract({ ...input, missingKeys: missing });
+      if (retry.nodes.length >= extraction.nodes.length) extraction = retry;
+    }
     const res = store.db.transaction(() =>
       applyPlan(extraction, { store: trajectory, projectId, docs, now: this.now }),
     )();
@@ -154,6 +159,17 @@ export class PlanEngine {
       this.syncGit(intoId);
       this.watchAll();
     }).then(() => this.deps.store.getProject(intoId));
+  }
+
+  /** Rebuild a project's roadmap from scratch (after extraction logic changes). Session-reported progress is lost. */
+  rebuild(projectId: string): Promise<void> {
+    return this.run(async () => {
+      const { store, trajectory } = this.deps;
+      trajectory.discardTrajectory(projectId);
+      for (const r of store.rootsOf(projectId)) trajectory.resetRootSha(r.path);
+      await this.syncDocs(projectId, true);
+      this.syncGit(projectId);
+    });
   }
 
   /** Re-read docs shortly after they change on disk; re-check git periodically. */

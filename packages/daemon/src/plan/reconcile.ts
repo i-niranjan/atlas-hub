@@ -60,13 +60,30 @@ export function applyPlan(
 
   // ── tracks ──────────────────────────────────────────────
   const trackIdByRef = new Map<string, string>();
+  const trackStart = new Map<string, string>();
   for (const t of x.tracks) {
     if (!quoteOk(t.evidence)) {
       result.rejected.push({ title: t.name, reason: "track quote not found in document" });
       continue;
     }
     const match = existing.tracks.find((e) => normTitle(e.name) === normTitle(t.name));
-    const at = createdAt(t.evidence.path);
+    // A track begins when its earliest item appeared, not when some later doc mentioned it.
+    const itemDates = x.nodes
+      .filter((n) => n.trackRef === t.ref && quoteOk(n.evidence))
+      .map((n) => createdAt(n.evidence.path));
+    let at = [createdAt(t.evidence.path), ...itemDates].sort()[0]!;
+    // A replaced plan predates its successor.
+    const successor = x.tracks.find((s) => s.forkedFromRef === t.ref);
+    if (successor) {
+      const succDates = [
+        createdAt(successor.evidence.path),
+        ...x.nodes
+          .filter((n) => n.trackRef === successor.ref && quoteOk(n.evidence))
+          .map((n) => createdAt(n.evidence.path)),
+      ].sort();
+      if (at >= succDates[0]!) at = new Date(Date.parse(succDates[0]!) - 86_400_000).toISOString();
+    }
+    trackStart.set(t.ref, at);
     const trackId = match?.id ?? store.createTrack({ projectId, name: t.name, at, source });
     if (!match) result.created++;
     trackIdByRef.set(t.ref, trackId);
@@ -99,13 +116,19 @@ export function applyPlan(
       (n.existingId ? nodesById.get(n.existingId) : undefined) ??
       (key ? existing.nodes.find((e) => e.key?.toLowerCase() === key.toLowerCase()) : undefined) ??
       existing.nodes.find((e) => e.trackId === trackId && normTitle(e.title) === normTitle(title));
-    const at = createdAt(n.evidence.path);
+    // Never before its track began.
+    const start = trackStart.get(n.trackRef);
+    const docAt = createdAt(n.evidence.path);
+    const at = start && docAt < start ? start : docAt;
+    // A replaced plan's items stay as they were; the track carries the abandonment.
+    const onAbandoned = x.tracks.find((tr) => tr.ref === n.trackRef)?.status === "abandoned";
+    const status = onAbandoned && n.status !== "done" ? "planned" : n.status;
     let nodeId: string;
     if (match) {
       nodeId = match.id;
       store.updateNode(nodeId, { title, sort, key: key ?? match.key, trackId });
-      if (advances(store.currentStatus(nodeId), n.status)) {
-        store.setNodeStatus(nodeId, n.status, changedAt(n.evidence.path), source);
+      if (advances(store.currentStatus(nodeId), status)) {
+        store.setNodeStatus(nodeId, status, changedAt(n.evidence.path), source);
         result.changed++;
       }
     } else {
@@ -122,7 +145,7 @@ export function applyPlan(
         at,
         status: "planned",
       });
-      if (n.status !== "planned") store.setNodeStatus(nodeId, n.status, at, source);
+      if (status !== "planned") store.setNodeStatus(nodeId, status, at, source);
       result.created++;
     }
     nodeIdByRef.set(n.ref, nodeId);

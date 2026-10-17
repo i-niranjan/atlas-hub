@@ -218,6 +218,11 @@ export function createApp(deps: ServerDeps): Hono {
     return c.json({ ok: true });
   });
 
+  app.post("/api/projects/:id/trajectory/rebuild", async (c) => {
+    await deps.engine.rebuild(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+
   app.get("/api/nodes/:id", (c) => {
     const t = deps.trajectory;
     const node = t.node(c.req.param("id"));

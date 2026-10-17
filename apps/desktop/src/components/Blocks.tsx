@@ -13,6 +13,8 @@ import {
   SectionTitle,
   useNav,
 } from "./parts.tsx";
+import { ScopeChart as ScopeChartView } from "./trajectory/ScopeChart.tsx";
+import { TrajectoryMap as TrajectoryMapView } from "./trajectory/TrajectoryMap.tsx";
 import { KindGlyph, Pill, StatusPill } from "./ui.tsx";
 
 /**
@@ -38,6 +40,7 @@ export function ViewRenderer({ state }: { state: CanvasState }) {
 }
 
 function BlockView({ block, state }: { block: Block; state: CanvasState }): ReactNode {
+  const { openNode } = useNav();
   const e = (id: string) => state.entries[id];
   switch (block.type) {
     case "DecisionCard": {
@@ -189,6 +192,40 @@ function BlockView({ block, state }: { block: Block; state: CanvasState }): Reac
           </dl>
         </Card>
       );
+    case "TrajectoryMap": {
+      const data = state.trajectories?.[block.projectId];
+      if (!data) return null;
+      const at = block.to ? `${block.to}T23:59:59.999Z` : new Date().toISOString();
+      return (
+        <Card className="!p-0 overflow-hidden">
+          <div className="flex items-baseline justify-between px-4 pt-3.5">
+            <h3 className="t-headline">{state.projects[block.projectId]?.name ?? "Roadmap"}</h3>
+            <span className="t-caption" style={{ color: "var(--label-3)" }}>
+              {block.to ? `As of ${shortDate(at)}` : "Live"}
+            </span>
+          </div>
+          <TrajectoryMapView
+            data={data}
+            at={at}
+            compact
+            height={Math.min(320, 120 + data.tracks.length * 92)}
+            onSelectNode={openNode}
+          />
+        </Card>
+      );
+    }
+    case "ScopeChart": {
+      const data = state.trajectories?.[block.projectId];
+      if (!data) return null;
+      return (
+        <Card>
+          <h3 className="t-headline mb-2">
+            Scope over time · {state.projects[block.projectId]?.name}
+          </h3>
+          <ScopeChartView data={data} />
+        </Card>
+      );
+    }
     case "Section":
       return (
         <section>

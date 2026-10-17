@@ -16,6 +16,8 @@ import { NavContext } from "./components/parts.tsx";
 import { Settings } from "./components/Settings.tsx";
 import { Sidebar, type Selection } from "./components/Sidebar.tsx";
 import { Timeline } from "./components/Timeline.tsx";
+import { LinkBanner } from "./components/trajectory/LinkBanner.tsx";
+import { Trajectory } from "./components/trajectory/Trajectory.tsx";
 import { Button, EmptyState, Kbd, Segmented, SkeletonRows } from "./components/ui.tsx";
 import { api, isTauri, type ListedEntry } from "./lib/api.ts";
 import { useCanvas } from "./lib/canvas.ts";
@@ -56,8 +58,26 @@ function matches(filter: Filter, e: ListedEntry): boolean {
 }
 
 const STORED_PROJECT = "atlas.selectedProject";
+const STORED_VIEW = "atlas.view";
+
+type View = "decisions" | "trajectory";
+
+/** `?view=trajectory&project=<id>` opens a specific view (deep links, screenshots). */
+const urlParams = typeof location !== "undefined" ? new URLSearchParams(location.search) : null;
+
+function readStoredView(): View {
+  const fromUrl = urlParams?.get("view");
+  if (fromUrl === "trajectory" || fromUrl === "decisions") return fromUrl;
+  try {
+    return localStorage.getItem(STORED_VIEW) === "trajectory" ? "trajectory" : "decisions";
+  } catch {
+    return "decisions";
+  }
+}
 
 function readStoredProject(): string | null {
+  const fromUrl = urlParams?.get("project");
+  if (fromUrl) return fromUrl;
   try {
     return localStorage.getItem(STORED_PROJECT);
   } catch {
@@ -82,7 +102,18 @@ export function App() {
     mode: "ask",
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [view, setViewState] = useState<View>(readStoredView);
+  const [nodeId, setNodeId] = useState<string | null>(null);
   const canvas = useCanvas();
+  const setView = useCallback((v: View) => {
+    setViewState(v);
+    setMode("timeline");
+    try {
+      localStorage.setItem(STORED_VIEW, v);
+    } catch {
+      // per-viewer convenience only
+    }
+  }, []);
 
   // Restore the last project, or pick the most recently active one.
   useEffect(() => {
@@ -108,6 +139,7 @@ export function App() {
     (s: Selection) => {
       setSelection(s);
       setEntryId(null);
+      setNodeId(null);
       if (s.kind === "project") {
         try {
           localStorage.setItem(STORED_PROJECT, s.projectId);
@@ -142,12 +174,21 @@ export function App() {
           setSelection({ kind: "project", projectId: d.projectId });
         }
         setMode("timeline");
+        setViewState("decisions");
         setFilter("all");
         setEntryId(id);
       });
       if (known) setEntryId(id);
     },
     [entries, reviewQueue, selection, projectId],
+  );
+
+  const openNode = useCallback(
+    (id: string) => {
+      setView("trajectory");
+      setNodeId(id);
+    },
+    [setView],
   );
 
   const ask = useCallback(
@@ -210,9 +251,15 @@ export function App() {
         case "add-project":
           void addProject();
           break;
+        case "show-decisions":
+          setView("decisions");
+          break;
+        case "show-trajectory":
+          setView("trajectory");
+          break;
       }
     },
-    [select, addProject],
+    [select, addProject, setView],
   );
 
   useEffect(() => {
@@ -261,6 +308,7 @@ export function App() {
 
   // ── render ────────────────────────────────────────────────
   const offline = live.state === "offline" && !!projectsError;
+  const showDecisions = view === "decisions" || selection?.kind !== "project";
   const lens = selection?.kind === "lens" ? selection.lens : null;
   const title =
     selection?.kind === "review" ? "Needs Review" : lens ? lens.title : (project?.name ?? "Atlas");
@@ -272,7 +320,7 @@ export function App() {
         : "";
 
   return (
-    <NavContext.Provider value={{ openEntry }}>
+    <NavContext.Provider value={{ openEntry, openNode }}>
       <div className="flex h-full">
         <Sidebar
           projects={projects}
@@ -296,7 +344,7 @@ export function App() {
             data-tauri-drag-region
             style={{ borderBottom: "0.5px solid var(--separator)" }}
           >
-            <div className="min-w-0 flex-1" data-tauri-drag-region>
+            <div className="min-w-0 shrink" data-tauri-drag-region>
               <h1 className="t-headline truncate" data-tauri-drag-region>
                 {title}
               </h1>
@@ -310,7 +358,19 @@ export function App() {
                 </p>
               )}
             </div>
-            {mode === "timeline" && !offline && projects?.length !== 0 && (
+            {selection?.kind === "project" && mode === "timeline" && !offline && (
+              <Segmented
+                label="View"
+                options={[
+                  { value: "decisions", label: "Decisions" },
+                  { value: "trajectory", label: "Trajectory" },
+                ]}
+                value={view}
+                onChange={setView}
+              />
+            )}
+            <div className="flex-1" data-tauri-drag-region />
+            {mode === "timeline" && !offline && projects?.length !== 0 && showDecisions && (
               <Segmented
                 label="Filter entries"
                 options={FILTERS}
@@ -340,6 +400,7 @@ export function App() {
             </Button>
           </header>
 
+          <LinkBanner projectId={projectId} />
           <div className="flex min-h-0 flex-1">
             {offline ? (
               <EmptyState
@@ -379,6 +440,14 @@ export function App() {
                   onOpenSettings={() => setSettingsOpen(true)}
                 />
               </div>
+            ) : !showDecisions && projectId ? (
+              <Trajectory
+                projectId={projectId}
+                decisions={entries}
+                onOpenEntry={openEntry}
+                selectedNodeId={nodeId}
+                onSelectNode={setNodeId}
+              />
             ) : (
               <>
                 <div

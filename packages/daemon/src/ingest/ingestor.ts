@@ -168,10 +168,29 @@ export class Ingestor {
         ];
         const knownProjects = store.listProjects();
         const tstore = this.deps.trajectory;
-        const trajectory =
-          tstore && tstore.hasTrajectory(project.id)
-            ? renderTrajectory(tstore.data(project.id), this.now)
-            : undefined;
+        // Roadmaps of the session's project and of any project the turns mention by path or name.
+        const chunkText = chunk.map((t) => t.text).join("\n");
+        const mentioned = knownProjects.filter(
+          (p) =>
+            p.id === project.id ||
+            chunkText.includes(p.rootPath) ||
+            chunkText.includes(p.rootPath.replace(/^\/Users\/[^/]+/, "~")) ||
+            (p.name.length >= 4 &&
+              new RegExp(`\\b${p.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(
+                chunkText,
+              )),
+        );
+        const withRoadmap = tstore
+          ? mentioned.filter((p) => tstore.hasTrajectory(p.id)).slice(0, 3)
+          : [];
+        const trajectory = withRoadmap.length
+          ? withRoadmap
+              .map(
+                (p) =>
+                  `## ${p.name} (${p.rootPath})\n${renderTrajectory(tstore!.data(p.id), this.now) ?? ""}`,
+              )
+              .join("\n\n")
+          : undefined;
         const batch = await extractor.extract({
           sessionProject: project,
           knownProjects,
@@ -184,11 +203,19 @@ export class Ingestor {
           const moved = store.db.transaction(() =>
             applyProgress(
               batch.progress,
-              { store: tstore, projectId: project.id, sessionId, newTurns: chunk, now: this.now },
+              {
+                store: tstore,
+                projectId: project.id,
+                projectIds: withRoadmap.map((p) => p.id),
+                sessionId,
+                newTurns: chunk,
+                now: this.now,
+              },
               (m) => this.log(m),
             ),
           )();
-          if (moved) bus.emit({ type: "trajectory.changed", projectId: project.id });
+          for (const pid of moved.projects)
+            bus.emit({ type: "trajectory.changed", projectId: pid });
         }
         const outcome = reconcile(batch.entries, {
           store,

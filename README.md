@@ -4,6 +4,11 @@ A local hub for the decisions, architecture and pivots behind every project on t
 
 Decide something with Claude Code in any project and Atlas picks it up automatically. It keeps what was decided, why, what was rejected, and how the decision changed later, with a verbatim quote from the session as evidence. Ask it questions with ⌘K: an agent composes the answer from recorded entries over [AG-UI](https://docs.ag-ui.com), so a view fits its content, whether that's a pivot lineage, an architecture diagram or a comparison of options.
 
+Atlas has two modules:
+
+- **Decisions:** what was decided and why, with verbatim evidence, lineage and pivots.
+- **Trajectory:** where each project is heading, drawn as a live subway map. Done work is solid and planned work dashed; a pivot forks a new line off the old plan, which ends with its reason. A heading card gives the goal and progress at a glance, **Replay** rebuilds the map at any past moment, and a scope chart shows growth and cuts. It is built from the project's own docs, approved Claude plans, sessions and git commits, and is never written out as documents (ADR 0012).
+
 ## How it works
 
 ```
@@ -32,6 +37,8 @@ pnpm --filter @atlas/desktop app:build    # → apps/desktop/src-tauri/target/re
 
 Then open Atlas → Settings (⌘,) and add an Anthropic API key. It is stored in the Keychain. Sessions captured before the key existed are processed as soon as you add it.
 
+A project can span folders, for example a plan folder plus its code repo. Atlas suggests linking them when commits name the plan's story ids; `node packages/daemon/src/cli.ts link <plan folder> <code folder>` does it by hand, and `… rebuild <folder>` regenerates a roadmap.
+
 `node packages/daemon/src/cli.ts uninstall` removes the hooks, the launchd agent and the MCP registration, and keeps your data.
 
 ## Using it
@@ -45,15 +52,17 @@ Then open Atlas → Settings (⌘,) and add an Anthropic API key. It is stored i
 
 ## Status
 
-| Milestone | Scope                                        | State                                |
-| --------- | -------------------------------------------- | ------------------------------------ |
-| M0        | Repo, tooling, schemas, ADRs                 | ✅                                   |
-| M1        | Transcript ingestion, hooks, spool, backfill | ✅                                   |
-| M2        | Extraction, evidence checks, lineage         | ✅ (golden evals pending an API key) |
-| M3        | MCP server                                   | ✅                                   |
-| M4        | Desktop app, deterministic views             | ✅                                   |
-| M5        | Generative canvas (⌘K) over AG-UI            | ✅                                   |
-| M6        | Installer, doctor, release build             | ✅                                   |
+| Milestone | Scope                                         | State                                |
+| --------- | --------------------------------------------- | ------------------------------------ |
+| M0        | Repo, tooling, schemas, ADRs                  | ✅                                   |
+| M1        | Transcript ingestion, hooks, spool, backfill  | ✅                                   |
+| M2        | Extraction, evidence checks, lineage          | ✅ (golden evals pending an API key) |
+| M3        | MCP server                                    | ✅                                   |
+| M4        | Desktop app, deterministic views              | ✅                                   |
+| M5        | Generative canvas (⌘K) over AG-UI             | ✅                                   |
+| M6        | Installer, doctor, release build              | ✅                                   |
+| T0–T2     | Trajectory engine: docs, sessions, git, links | ✅                                   |
+| T3–T5     | Trajectory map, heading, Replay, scope chart  | ✅                                   |
 
 ## Development
 

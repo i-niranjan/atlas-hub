@@ -37,7 +37,10 @@ export function renderTrajectory(data: TrajectoryData, now: string): string | un
 
 export interface ProgressContext {
   store: TrajectoryStore;
+  /** The session's project: where added work and pivots go by default. */
   projectId: string;
+  /** Every project whose roadmap the model was shown; status changes may touch any of them. */
+  projectIds?: string[];
   sessionId: string;
   newTurns: Turn[];
   now: string;
@@ -50,8 +53,10 @@ export function applyProgress(
   items: ProgressItem[],
   ctx: ProgressContext,
   log: (m: string) => void = () => undefined,
-): number {
-  const { store, projectId } = ctx;
+): { changes: number; projects: string[] } {
+  const { store } = ctx;
+  const allowed = new Set(ctx.projectIds ?? [ctx.projectId]);
+  const changed = new Set<string>();
   let changes = 0;
   for (const item of items) {
     const evidence = verifyEvidence(item.evidence, ctx.newTurns, ctx.sessionId);
@@ -75,18 +80,24 @@ export function applyProgress(
     const status = ACTION_STATUS[item.action];
     if (status) {
       const node = item.nodeId ? store.node(item.nodeId) : null;
-      if (!node || node.projectId !== projectId) {
+      if (!node || !allowed.has(node.projectId)) {
         log(`progress "${item.title}" rejected: unknown node`);
         continue;
       }
       if (!advances(store.currentStatus(node.id), status)) continue;
       store.setNodeStatus(node.id, status, at, "session");
+      changed.add(node.projectId);
       if (!sure) store.setNodeReview(node.id, "needs_review");
       cite(node.id);
       changes++;
       continue;
     }
 
+    // Added work goes to the milestone's project when one is named, else the session's project.
+    const milestone = item.milestoneId ? store.node(item.milestoneId) : null;
+    const projectId =
+      milestone && allowed.has(milestone.projectId) ? milestone.projectId : ctx.projectId;
+    if (!allowed.has(projectId) || !store.hasTrajectory(projectId)) continue;
     const data = store.data(projectId);
     const h = heading(projectAt(data, ctx.now));
     if (!h.track) continue;
@@ -117,6 +128,7 @@ export function applyProgress(
         status: "planned",
       });
       cite(nodeId);
+      changed.add(projectId);
       changes++;
       continue;
     }
@@ -156,8 +168,9 @@ export function applyProgress(
       });
       cite(pivotId);
       cite(trackId);
+      changed.add(projectId);
       changes++;
     }
   }
-  return changes;
+  return { changes, projects: [...changed] };
 }

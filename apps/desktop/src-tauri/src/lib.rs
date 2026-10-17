@@ -38,6 +38,8 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         true,
         Some("CmdOrCtrl+Shift+H"),
     )?;
+    let show_decisions = MenuItem::with_id(app, "show-decisions", "Decisions", true, Some("CmdOrCtrl+Shift+D"))?;
+    let show_trajectory = MenuItem::with_id(app, "show-trajectory", "Trajectory", true, Some("CmdOrCtrl+Shift+T"))?;
     let add_project = MenuItem::with_id(app, "add-project", "Track Project Folder…", true, Some("CmdOrCtrl+O"))?;
 
     let app_menu = Submenu::with_items(
@@ -77,7 +79,16 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         app,
         "View",
         true,
-        &[&ask, &search, &review, &PredefinedMenuItem::separator(app)?, &superseded],
+        &[
+            &show_decisions,
+            &show_trajectory,
+            &PredefinedMenuItem::separator(app)?,
+            &ask,
+            &search,
+            &review,
+            &PredefinedMenuItem::separator(app)?,
+            &superseded,
+        ],
     )?;
     let window_menu = Submenu::with_items(
         app,

@@ -131,6 +131,23 @@ async function cmdLink(
   );
 }
 
+/** Regenerate a project's roadmap from its docs and commits, via the running daemon. */
+async function cmdRebuild(config: Config, path: string | undefined): Promise<void> {
+  if (!path) throw new Error("usage: atlas rebuild <project folder>");
+  const rt = await runtime(config);
+  const p = rt.store.projectForRoot(resolve(path)) ?? rt.store.findProject(path);
+  if (!p) throw new Error(`Atlas doesn't track ${path}.`);
+  const res = await fetch(
+    `http://${config.host}:${config.port}/api/projects/${p.id}/trajectory/rebuild`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${ensureToken(config)}` },
+    },
+  ).catch(() => null);
+  if (!res?.ok) throw new Error("atlasd isn't running; start it with `atlas install`.");
+  console.log(`Rebuilt the roadmap for ${p.name}.`);
+}
+
 async function cmdInstall(config: Config): Promise<void> {
   const token = ensureToken(config);
   console.log(`✓ Hooks merged into ${installHooks(config)} (backup: settings.json.atlas-backup)`);
@@ -176,7 +193,8 @@ const HELP = `atlas ${VERSION}
   atlas doctor       check the installation
   atlas backfill     process every existing Claude Code transcript
   atlas add <path>   track a project folder and import its docs/decisions
-  atlas link <docs> <code>   treat a code repo as part of the project whose plan lives in <docs>`;
+  atlas link <docs> <code>   treat a code repo as part of the project whose plan lives in <docs>
+  atlas rebuild <path>       regenerate a project's roadmap from its docs and commits`;
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -194,6 +212,8 @@ async function main(): Promise<void> {
       return cmdBackfill(config);
     case "add":
       return cmdAdd(config, arg);
+    case "rebuild":
+      return cmdRebuild(config, arg);
     case "link":
       return cmdLink(config, arg, process.argv[4]);
     default:
