@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { TrajectoryStore } from "./plan/store.ts";
 import type { Store } from "./store.ts";
+import type { UsageSink } from "./usage.ts";
 
 /**
  * The generative canvas (ADR 0004/0005). Claude reads the store through tools
@@ -33,10 +34,10 @@ How to work:
 
 Composing the view:
 - Reference recorded entries by id (DecisionCard, EntryList, PivotLineage, OpenQuestions). The app fills in their content from the store, so never restate an entry's details in Markdown.
-- PivotLineage for "how did X evolve / why did we change". DecisionCard for one key decision. EntryList for several related ones. OpenQuestions for unresolved questions.
+- PivotLineage for how one decision evolved over time ("how did our choice of database change"). DecisionCard for one key decision. EntryList for several related ones. OpenQuestions for unresolved questions.
 - ArchitectureDiagram only when architecture entries describe components and how they connect. Build the Mermaid flowchart strictly from those entries and list them in sourceEntryIds. Use graph TD unless the flow is a simple chain of four nodes or fewer; keep node labels to two or three words and edge labels to one or two. Put caveats about the diagram in its caption, not in your reply.
 - OptionsCompare only when an entry's recorded alternatives support it; set sourceEntryId.
-- TrajectoryMap for "where are we heading / what's the plan / how far along"; ScopeChart for "how did scope change"; PivotExplainer for "why did the direction change". Use get_trajectory first to know what's there.
+- TrajectoryMap for "where are we heading / what's the plan / how far along"; ScopeChart for "how did scope change"; PivotExplainer when the project as a whole changed direction ("why did the project change course", "what was the original plan"); check get_trajectory for tracks with a change before using it. Use get_trajectory first to know what's there.
 - Section groups related blocks under a heading. Callout (info) for a short note, e.g. that something is not recorded.
 - Prefer 1-4 blocks. Lead with the most direct answer.
 - Say each thing once. Your reply sentences already sit above the view, so never add a Callout or Markdown block that restates them.
@@ -45,7 +46,8 @@ Composing the view:
 Rules:
 - Use only what the tools return. If nothing relevant is recorded, do not call render_view: reply with one plain sentence saying so (and, if another project has relevant entries, name it). Never guess.
 - Unconfirmed entries (review: needs_review) may be shown, but say they are unconfirmed when they matter to the answer.
-- No filler, no greetings, no restating the question.`;
+- No filler, no greetings, no restating the question.
+- Write for someone new to the project: plain words, and when a project-specific term is unavoidable, say in a few words what it is.`;
 
 const ViewInput = z.object({ title: z.string(), blocks: z.array(z.unknown()) });
 
@@ -320,6 +322,7 @@ export interface AgentDeps {
   trajectory?: TrajectoryStore;
   apiKey: string | null;
   model: string;
+  onUsage?: UsageSink;
 }
 
 const MAX_TURNS = 8;
@@ -387,6 +390,7 @@ export function runCanvas(input: RunAgentInput, deps: AgentDeps): ReadableStream
             send({ type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta } as BaseEvent);
           });
           const message = await stream.finalMessage();
+          deps.onUsage?.("ask", deps.model, message.usage, projectId ?? null);
           if (messageId) send({ type: EventType.TEXT_MESSAGE_END, messageId } as BaseEvent);
 
           if (message.stop_reason === "refusal") throw new Error("The request was declined.");

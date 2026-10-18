@@ -1,5 +1,6 @@
 import type {
   Alternative,
+  PivotChange,
   Entry,
   EntryDetail,
   EntryStatus,
@@ -13,6 +14,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { DB } from "./db.ts";
 
 export type EntrySource = EntryDetail["source"];
+export type StoredEntry = Entry & { source: EntrySource; change: PivotChange | null };
 
 export interface EntryFilter {
   projectId?: string;
@@ -37,6 +39,7 @@ interface EntryRow {
   source: EntrySource;
   decided_at: string;
   created_at: string;
+  change_json: string | null;
 }
 
 interface ProjectRow {
@@ -408,7 +411,7 @@ export class Store {
     ).map((r) => ({ sessionId: r.session_id, messageUuid: r.message_uuid, quote: r.quote }));
   }
 
-  private toEntry(r: EntryRow): Entry & { source: EntrySource } {
+  private toEntry(r: EntryRow): StoredEntry {
     return {
       id: r.id,
       projectId: r.project_id,
@@ -425,7 +428,14 @@ export class Store {
       decidedAt: r.decided_at,
       createdAt: r.created_at,
       source: r.source,
+      change: r.change_json ? (JSON.parse(r.change_json) as PivotChange) : null,
     };
+  }
+
+  setEntryChange(id: string, change: PivotChange | null): void {
+    this.db
+      .prepare(`UPDATE entries SET change_json = ? WHERE id = ?`)
+      .run(change ? JSON.stringify(change) : null, id);
   }
 
   /** Insert or replace an entry and merge its evidence. */
@@ -468,12 +478,12 @@ export class Store {
     );
   }
 
-  getEntry(id: string): (Entry & { source: EntrySource }) | null {
+  getEntry(id: string): StoredEntry | null {
     const r = this.db.prepare(`SELECT * FROM entries WHERE id = ?`).get(id) as EntryRow | undefined;
     return r ? this.toEntry(r) : null;
   }
 
-  listEntries(f: EntryFilter = {}): (Entry & { source: EntrySource })[] {
+  listEntries(f: EntryFilter = {}): StoredEntry[] {
     const where: string[] = ["review_state != 'dismissed'"];
     const params: Record<string, unknown> = { limit: f.limit ?? 500 };
     if (f.projectId) {
@@ -501,7 +511,7 @@ export class Store {
     return rows.map((r) => this.toEntry(r));
   }
 
-  search(text: string, projectId?: string, limit = 20): (Entry & { source: EntrySource })[] {
+  search(text: string, projectId?: string, limit = 20): StoredEntry[] {
     const q = ftsQuery(text);
     if (!q) return [];
     const rows = this.db

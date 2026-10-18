@@ -10,7 +10,7 @@ Record an entry only when the conversation shows a choice was made or agreed:
 - the developer states a choice ("let's use X", "go with option 2", "remove that feature")
 - the developer picks an option offered to them (turns marked CHOICE are answers to questions or plan approvals; they are the strongest evidence)
 - the developer approves a proposal that names the choice ("ok", "go ahead" directly after a concrete proposal)
-- the assistant makes a design choice while working and states it, even without the developer commenting (record it, but at confidence ≤ 0.6)
+- the assistant makes a design choice that shapes the project (architecture, a dependency, a data format, user-facing behaviour) and states it, without the developer objecting (record it at confidence ≤ 0.6). Routine implementation choices the assistant makes while coding are not decisions.
 
 Kinds:
 - decision: a choice among alternatives (library, approach, scope, naming, process)
@@ -32,7 +32,8 @@ Do NOT record:
 You get the existing entries. For each thing you record, choose an action:
 - "new": nothing existing covers it
 - "duplicate": an existing entry already records this exact choice; set targetId. Use this to attach new evidence instead of creating a near-copy.
-- "supersedes": this replaces or reverses an existing active entry; set targetId and explain in the rationale what changed and why. Use kind "pivot" when the direction genuinely reverses.
+- "supersedes": this replaces or reverses an existing active entry; set targetId. Use kind "pivot" when the direction genuinely reverses. Also fill before (the old choice, in plain words), after (the new choice, in plain words), shifts (1-3 concrete differences, each "old → new", at most 4 words a side) and cost (what was given up, or null). The rationale then states the cause of the change: the problem with the old choice or the new fact, as the turns state it. A reference to a document is not a cause.
+For any other action leave before, after and cost null and shifts empty.
 - "resolves": this answers an existing open_question; set targetId.
 Only use ids that appear in the existing entries. A proposal that was never accepted cannot be superseded; that is a "new" decision.
 
@@ -46,13 +47,21 @@ Every entry needs 1-3 evidence quotes copied verbatim from the NEW turns: the ex
 
 # Writing
 
-- title: imperative or noun phrase naming the choice, at most 80 characters ("Use SQLite with FTS5 for storage")
+Write for someone with no context on the project; they read these records later to understand it.
+- title: imperative or noun phrase naming the choice in plain words, at most 80 characters ("Store decisions in a local SQLite database"). Internal names and acronyms are fine only if the summary makes them clear.
 - summary: one line, at most ${SUMMARY_MAX} characters, saying what was chosen and the key reason. Specific nouns, no filler ("This decision...", "The team decided...")
-- rationale: 1-3 sentences. Name the trade-off: what this gains and what it costs or rules out
+- rationale: 1-3 sentences giving the reason as the conversation states it. Name the trade-off (what this gains, what it costs or rules out) when the conversation states one; otherwise say what it was chosen over and why. Never invent a trade-off or a reason.
 - alternatives: options actually considered and why each lost, only if the conversation says so
 - confidence: 0.9+ explicit developer choice; 0.7-0.9 clear agreement; ≤0.6 assistant-made or ambiguous
 
 If the new turns contain no decisions, return an empty list. That is the common case.
+`;
+
+export const ROADMAP_SYSTEM = `You maintain the roadmaps in Atlas, which draws where software projects are heading. You read a slice of a conversation between a developer and Claude Code and report how it moves a project's roadmap. A wrong change is worse than a missing one.
+
+# Evidence
+Every item needs 1-3 evidence quotes copied verbatim from the NEW turns: the exact characters, 4-300 characters long, from the turn whose uuid you give. Prefer the developer's own words or a CHOICE turn (an answer to a question or a plan approval). Quotes are checked mechanically; items with invented quotes are discarded.
+Confidence: 0.9+ explicit developer statement; 0.7-0.9 clear agreement; ≤0.6 assistant-only or ambiguous.
 
 # Progress (only when <trajectory> is given; otherwise return an empty progress list)
 
@@ -60,7 +69,7 @@ If the new turns contain no decisions, return an empty list. That is the common 
 - started / done / dropped / blocked: an existing node (nodeId) whose work clearly began, was finished (implemented and verified, not merely discussed), was cut from scope, or is blocked.
 - added: new work the developer brought into scope (title; milestoneId when it clearly belongs to one; kind "story"). On a roadmap marked managed_by="sessions" you may also add a whole new phase with kind "milestone".
 - pivot: the developer changed the project's direction so the current plan no longer applies. Rare; only for explicit decisions. title = the new direction; before = the old plan in plain words; after = the new plan in plain words; reason = the cause as the turns state it (the problem with the old approach or the new fact), or null if not stated; shifts = 2-4 concrete differences, each written "old → new" with at most 4 words a side; cost = what was given up or postponed, or null. For other actions leave before/after/cost null and shifts empty. Write for someone with no context on the project; a reference to a document or "the plan changed" is not a why.
-Same evidence rules as entries. Do not report planning talk as progress. Empty is the common case.
+Same evidence rules as above. Do not report planning talk as progress. Empty is the common case.
 
 # Starting a roadmap (only when <no_roadmap> is given; otherwise newPlan is null)
 
@@ -81,11 +90,13 @@ export interface ExtractInput {
   noRoadmap?: boolean;
 }
 
-const TURN_MAX_CHARS = 6000;
+/** The developer's own words carry the decisions, so they get more room than assistant replies. */
+const TURN_MAX_CHARS = { user: 20_000, choice: 12_000, assistant: 6_000 } as const;
 
 function renderTurn(t: Turn): string {
   const role = t.role === "choice" ? "CHOICE" : t.role.toUpperCase();
-  const text = t.text.length > TURN_MAX_CHARS ? `${t.text.slice(0, TURN_MAX_CHARS)} […]` : t.text;
+  const max = TURN_MAX_CHARS[t.role];
+  const text = t.text.length > max ? `${t.text.slice(0, max)} […]` : t.text;
   return `[${t.uuid}] ${role} (${t.timestamp}):\n${text}`;
 }
 

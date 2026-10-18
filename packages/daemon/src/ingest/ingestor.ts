@@ -49,7 +49,9 @@ export function chunkTurns(turns: Turn[], maxChars = CHUNK_CHARS): Turn[][] {
   let cur: Turn[] = [];
   let size = 0;
   for (const t of turns) {
-    const len = Math.min(t.text.length, 6000) + 80;
+    const len =
+      Math.min(t.text.length, t.role === "user" ? 20_000 : t.role === "choice" ? 12_000 : 6_000) +
+      80;
     if (cur.length && size + len > maxChars) {
       chunks.push(cur);
       cur = [];
@@ -167,10 +169,6 @@ export class Ingestor {
     let processed = session.processedTurns;
     try {
       for (const chunk of chunkTurns(redacted.slice(processed))) {
-        const shown = [
-          ...store.listEntries({ status: "active", limit: 150 }),
-          ...store.listEntries({ status: "resolved", limit: 20 }),
-        ];
         const knownProjects = store.listProjects();
         const tstore = this.deps.trajectory;
         // Roadmaps of the session's project and of any project the turns mention by path or name.
@@ -185,6 +183,12 @@ export class Ingestor {
                 chunkText,
               )),
         );
+        // Existing entries come from the projects in this conversation, so older ones in a
+        // busy project never fall out of view (which would let duplicates in).
+        const shown = mentioned.flatMap((p) => [
+          ...store.listEntries({ projectId: p.id, status: "active", limit: 150 }),
+          ...store.listEntries({ projectId: p.id, status: "resolved", limit: 20 }),
+        ]);
         const withRoadmap = tstore
           ? mentioned.filter((p) => tstore.hasTrajectory(p.id)).slice(0, 3)
           : [];

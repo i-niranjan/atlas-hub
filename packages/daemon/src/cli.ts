@@ -27,14 +27,20 @@ import { AnthropicPlanExtractor } from "./plan/extract.ts";
 import { TrajectoryStore } from "./plan/store.ts";
 import { createApp } from "./server.ts";
 import { Store } from "./store.ts";
+import { UsageLog } from "./usage.ts";
 
 async function runtime(config: Config) {
   const store = new Store(openDb(config.dbPath));
   const bus = new Bus();
   const mirror = new Mirror(config.mirrorDir);
   let apiKey = process.env.ANTHROPIC_API_KEY ?? (await keychain.get());
-  let extractor = apiKey ? new AnthropicExtractor(apiKey, config.models.extract) : null;
-  let planExtractor = apiKey ? new AnthropicPlanExtractor(apiKey, config.models.extract) : null;
+  const usage = new UsageLog(store.db);
+  let extractor = apiKey
+    ? new AnthropicExtractor(apiKey, config.models.extract, usage.record)
+    : null;
+  let planExtractor = apiKey
+    ? new AnthropicPlanExtractor(apiKey, config.models.extract, usage.record)
+    : null;
   const trajectory = new TrajectoryStore(store.db);
   const engine = new PlanEngine({
     store,
@@ -57,11 +63,23 @@ async function runtime(config: Config) {
     if (key) await keychain.set(key);
     else await keychain.remove();
     apiKey = key;
-    extractor = key ? new AnthropicExtractor(key, config.models.extract) : null;
-    planExtractor = key ? new AnthropicPlanExtractor(key, config.models.extract) : null;
+    extractor = key ? new AnthropicExtractor(key, config.models.extract, usage.record) : null;
+    planExtractor = key
+      ? new AnthropicPlanExtractor(key, config.models.extract, usage.record)
+      : null;
     if (key) void engine.syncAll();
   };
-  return { store, bus, mirror, ingestor, trajectory, engine, apiKey: () => apiKey, setApiKey };
+  return {
+    store,
+    bus,
+    mirror,
+    ingestor,
+    trajectory,
+    engine,
+    usage,
+    apiKey: () => apiKey,
+    setApiKey,
+  };
 }
 
 async function cmdServe(config: Config): Promise<void> {

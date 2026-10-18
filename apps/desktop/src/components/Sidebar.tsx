@@ -1,5 +1,5 @@
 import type { Lens, ProjectSummary, StatusReport } from "@atlas/core";
-import { Folder, Inbox, Layers, Plus, Settings, Signpost, Waypoints, X } from "lucide-react";
+import { Coins, Folder, Inbox, Layers, Plus, Settings, Signpost, Waypoints, X } from "lucide-react";
 import { ContextMenu } from "radix-ui";
 import type { ReactNode } from "react";
 import { isTauri } from "../lib/api.ts";
@@ -13,6 +13,7 @@ import type { LiveState } from "../lib/queries.ts";
 export type Selection =
   | { kind: "project"; projectId: string }
   | { kind: "review" }
+  | { kind: "usage" }
   | { kind: "lens"; projectId: string; lens: Lens };
 
 interface Props {
@@ -93,7 +94,10 @@ function SectionHeader({ children, action }: { children: ReactNode; action?: Rea
 export function Sidebar(props: Props) {
   const { projects, selection, status } = props;
   const now = Date.now();
-  const selectedProject = selection && selection.kind !== "review" ? selection.projectId : null;
+  const selectedProject =
+    selection && (selection.kind === "project" || selection.kind === "lens")
+      ? selection.projectId
+      : null;
 
   return (
     <nav aria-label="Sidebar" className="flex h-full w-[232px] shrink-0 flex-col">
@@ -105,6 +109,12 @@ export function Sidebar(props: Props) {
           label="Needs Review"
           badge={props.reviewCount}
           onClick={() => props.onSelect({ kind: "review" })}
+        />
+        <Row
+          selected={selection?.kind === "usage"}
+          icon={<Coins size={16} strokeWidth={1.8} />}
+          label="Usage"
+          onClick={() => props.onSelect({ kind: "usage" })}
         />
 
         <SectionHeader

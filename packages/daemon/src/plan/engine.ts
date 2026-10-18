@@ -97,6 +97,7 @@ export class PlanEngine {
     }));
     const input = {
       projectName: project.name,
+      projectId,
       docs,
       tracks: data.tracks,
       nodes: data.nodes,

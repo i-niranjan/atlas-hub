@@ -16,6 +16,7 @@ export function PivotExplainer({
   at,
   decisions = [],
   compact = false,
+  showWhy = true,
 }: {
   change: PivotChange;
   fromName: string;
@@ -23,6 +24,8 @@ export function PivotExplainer({
   at?: string;
   decisions?: Entry[];
   compact?: boolean;
+  /** Off where the surrounding view already shows the reason. */
+  showWhy?: boolean;
 }) {
   const { openEntry } = useNav();
   const linked = change.entryIds
@@ -99,16 +102,18 @@ export function PivotExplainer({
       )}
 
       {/* Why */}
-      <div>
-        <div className="t-section mb-1">Why</div>
-        {change.why ? (
-          <p className="t-body selectable">{change.why}</p>
-        ) : (
-          <p className="t-callout flex items-center gap-1.5" style={{ color: "var(--label-3)" }}>
-            <CircleSlash size={12} aria-hidden /> Not recorded. No doc or decision says why.
-          </p>
-        )}
-      </div>
+      {showWhy && (
+        <div>
+          <div className="t-section mb-1">Why</div>
+          {change.why ? (
+            <p className="t-body selectable">{change.why}</p>
+          ) : (
+            <p className="t-callout flex items-center gap-1.5" style={{ color: "var(--label-3)" }}>
+              <CircleSlash size={12} aria-hidden /> Not recorded. No doc or decision says why.
+            </p>
+          )}
+        </div>
+      )}
 
       {change.cost && (
         <div>

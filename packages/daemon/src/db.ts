@@ -181,6 +181,23 @@ const MIGRATIONS: string[] = [
     ignored_at TEXT NOT NULL
   );
   `,
+  // 5 · What Atlas spends on Claude, per call; and structured pivots on decisions too.
+  `
+  CREATE TABLE llm_usage (
+    id            INTEGER PRIMARY KEY,
+    at            TEXT NOT NULL,
+    feature       TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    project_id    TEXT,
+    input_tokens  INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    cache_read    INTEGER NOT NULL DEFAULT 0,
+    cache_write   INTEGER NOT NULL DEFAULT 0,
+    cost_usd      REAL NOT NULL
+  );
+  CREATE INDEX llm_usage_at ON llm_usage(at);
+  ALTER TABLE entries ADD COLUMN change_json TEXT;
+  `,
 ];
 
 export function openDb(path: string): DB {

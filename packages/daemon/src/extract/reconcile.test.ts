@@ -38,6 +38,10 @@ const candidate = (over: Partial<Candidate>): Candidate => ({
   alternatives: [],
   confidence: 0.92,
   evidence: [{ turnUuid: "u1", quote: "Let's use SQLite for storage" }],
+  before: null,
+  after: null,
+  cost: null,
+  shifts: [],
   ...over,
 });
 
@@ -130,6 +134,37 @@ describe("reconcile", () => {
     expect(store.getEntry(first)!.status).toBe("superseded");
     expect(store.getEntry(pivot)!.supersedesId).toBe(first);
     expect(store.lineage(first).map((e) => e.id)).toEqual([first, pivot]);
+  });
+
+  it("stores a structured change when a decision replaces another", () => {
+    const first = reconcile([candidate({})], ctx).saved[0]!;
+    ctx.shownIds = new Set([first]);
+    const id = reconcile(
+      [
+        candidate({
+          action: "supersedes",
+          targetId: first,
+          kind: "pivot",
+          title: "Switch storage to Postgres",
+          summary: "Postgres replaces SQLite to support concurrent writers.",
+          rationale: "Several writers need to save at once, which SQLite can't do well.",
+          evidence: [{ turnUuid: "u2", quote: "switch to Postgres, we need concurrent writers" }],
+          before: "SQLite file on disk",
+          after: "Postgres server",
+          shifts: ["Local file → Database server", "not a shift"],
+          cost: "Need to run a server",
+        }),
+      ],
+      ctx,
+    ).saved[0]!;
+    expect(store.getEntry(id)!.change).toEqual({
+      before: "SQLite file on disk",
+      after: "Postgres server",
+      why: "Several writers need to save at once, which SQLite can't do well.",
+      shifts: [{ from: "Local file", to: "Database server" }],
+      cost: "Need to run a server",
+      entryIds: [first],
+    });
   });
 
   it("merges duplicates as extra evidence instead of a near-copy", () => {

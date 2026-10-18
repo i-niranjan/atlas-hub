@@ -12,6 +12,11 @@ export const Candidate = z.object({
   alternatives: z.array(z.object({ option: z.string(), whyNot: z.string() })),
   confidence: z.number(),
   evidence: z.array(z.object({ turnUuid: z.string(), quote: z.string() })),
+  /** For "supersedes": the change, for someone with no context. Flat to keep the output grammar small. */
+  before: z.string().nullable(),
+  after: z.string().nullable(),
+  cost: z.string().nullable(),
+  shifts: z.array(z.string()),
 });
 export type Candidate = z.infer<typeof Candidate>;
 
@@ -61,10 +66,19 @@ export const NewPlan = z.object({
 });
 export type NewPlan = z.infer<typeof NewPlan>;
 
+/** Call 1: decisions. Kept separate so each structured-output grammar stays small. */
+export const DecisionBatch = z.object({ entries: z.array(Candidate) });
+
+/** Call 2 (only when a roadmap is involved): movement on it, or a roadmap to start. */
+export const RoadmapBatch = z.object({
+  progress: z.array(ProgressItem),
+  /** Only when <no_roadmap> was given and the turns lay out an agreed plan. */
+  newPlan: NewPlan.nullable(),
+});
+
 export const CandidateBatch = z.object({
   entries: z.array(Candidate),
   progress: z.array(ProgressItem),
-  /** Only when <no_roadmap> was given and the turns lay out an agreed plan. */
   newPlan: NewPlan.nullable(),
 });
 export type CandidateBatch = z.infer<typeof CandidateBatch>;

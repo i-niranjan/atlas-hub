@@ -93,6 +93,21 @@ export function reconcile(candidates: Candidate[], ctx: ReconcileContext): Recon
 
     ctx.store.db.transaction(() => {
       ctx.store.saveEntry(parsed.data, "extracted");
+      // A replacement carries its change structured, like a roadmap pivot.
+      if (linksTarget && c.action === "supersedes" && (c.before || c.after || c.shifts.length)) {
+        ctx.store.setEntryChange(parsed.data.id, {
+          before: c.before?.trim().slice(0, 120) ?? target.title,
+          after: c.after?.trim().slice(0, 120) ?? parsed.data.title,
+          why: parsed.data.rationale,
+          shifts: c.shifts
+            .map((sh) => sh.split(/\s*(?:→|->)\s*/))
+            .filter((parts) => parts.length === 2 && parts[0] && parts[1])
+            .map(([from, to]) => ({ from: from!.trim().slice(0, 40), to: to!.trim().slice(0, 40) }))
+            .slice(0, 3),
+          cost: c.cost?.trim().slice(0, 200) || null,
+          entryIds: [target.id],
+        });
+      }
       if (linksTarget)
         ctx.store.setStatus(target.id, c.action === "resolves" ? "resolved" : "superseded");
     })();

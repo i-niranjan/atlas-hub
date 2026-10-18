@@ -13,6 +13,7 @@ import { handleMcp } from "./mcp.ts";
 import type { Mirror } from "./mirror.ts";
 import type { PlanEngine } from "./plan/engine.ts";
 import type { TrajectoryStore } from "./plan/store.ts";
+import type { UsageLog } from "./usage.ts";
 import type { Store } from "./store.ts";
 
 export interface ServerDeps {
@@ -27,6 +28,7 @@ export interface ServerDeps {
   integrationStatus: () => { hooksInstalled: boolean; mcpRegistered: boolean };
   trajectory: TrajectoryStore;
   engine: PlanEngine;
+  usage: UsageLog;
 }
 
 const ALLOWED_ORIGINS = new Set([
@@ -279,6 +281,11 @@ export function createApp(deps: ServerDeps): Hono {
 
   app.get("/api/ignored", (c) => c.json(store.listIgnored()));
 
+  app.get("/api/usage", (c) => {
+    const days = Math.min(365, Math.max(1, Number(c.req.query("days") ?? 30) || 30));
+    return c.json(deps.usage.report(days));
+  });
+
   app.post("/api/ignored/restore", async (c) => {
     const body = z
       .object({ path: z.string().min(1) })
@@ -338,6 +345,7 @@ export function createApp(deps: ServerDeps): Hono {
       trajectory: deps.trajectory,
       apiKey: deps.apiKey(),
       model: config.models.canvas,
+      onUsage: deps.usage.record,
     });
     return new Response(body, {
       headers: {

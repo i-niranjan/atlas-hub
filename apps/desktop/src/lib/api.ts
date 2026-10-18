@@ -5,6 +5,7 @@ import type {
   LinkSuggestion,
   NodeDetail,
   TrajectoryData,
+  UsageReport,
   ProjectSummary,
   ReviewState,
   StatusReport,
@@ -135,6 +136,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ deleteData }),
     }),
+  usage: (days: number) => request<UsageReport>(`/api/usage?days=${days}`),
   ignored: () =>
     request<
       { path: string; projectId: string | null; projectName: string | null; ignoredAt: string }[]

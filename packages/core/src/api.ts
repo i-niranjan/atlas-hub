@@ -2,6 +2,7 @@ import type { Entry } from "./entry.ts";
 import type { Project, Session } from "./project.ts";
 import type {
   NodeStatus,
+  PivotChange,
   TNode,
   Track,
   TrajectoryData,
@@ -19,6 +20,8 @@ export interface ProjectSummary extends Project {
 
 export interface EntryDetail extends Entry {
   source: "extracted" | "adr" | "manual";
+  /** For an entry that replaced another: what changed, structured for a newcomer. */
+  change: PivotChange | null;
   /** Oldest first; includes this entry. */
   lineage: Pick<Entry, "id" | "kind" | "title" | "status" | "decidedAt">[];
   supersededBy: Pick<Entry, "id" | "title"> | null;
@@ -70,3 +73,28 @@ export type LiveEvent =
   | { type: "session.changed"; projectId: string; sessionId: string; state: Session["state"] }
   | { type: "trajectory.changed"; projectId: string }
   | { type: "status.changed" };
+
+/** What each Atlas feature spends on Claude: session reading, roadmaps, Ask Atlas. */
+export type Feature = "decisions" | "roadmap" | "ask";
+
+export interface UsageReport {
+  days: number;
+  total: { costUsd: number; inputTokens: number; outputTokens: number; calls: number };
+  byFeature: { feature: Feature; costUsd: number; tokens: number; calls: number }[];
+  byDay: { day: string; feature: Feature; costUsd: number; tokens: number }[];
+  byProject: {
+    projectId: string | null;
+    name: string | null;
+    costUsd: number;
+    tokens: number;
+    calls: number;
+  }[];
+  recent: {
+    at: string;
+    feature: Feature;
+    model: string;
+    projectName: string | null;
+    tokens: number;
+    costUsd: number;
+  }[];
+}

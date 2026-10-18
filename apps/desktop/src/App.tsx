@@ -18,6 +18,7 @@ import { Settings } from "./components/Settings.tsx";
 import { StopTracking } from "./components/StopTracking.tsx";
 import { Sidebar, type Selection } from "./components/Sidebar.tsx";
 import { Timeline } from "./components/Timeline.tsx";
+import { Usage } from "./components/Usage.tsx";
 import { LinkBanner } from "./components/trajectory/LinkBanner.tsx";
 import { Trajectory } from "./components/trajectory/Trajectory.tsx";
 import { Button, EmptyState, Kbd, Segmented, SkeletonRows } from "./components/ui.tsx";
@@ -129,7 +130,10 @@ export function App() {
     setSelection({ kind: "project", projectId: p.id });
   }, [projects, selection]);
 
-  const projectId = selection && selection.kind !== "review" ? selection.projectId : null;
+  const projectId =
+    selection && (selection.kind === "project" || selection.kind === "lens")
+      ? selection.projectId
+      : null;
   const project = projects?.find((p) => p.id === projectId) ?? null;
   const { data: projectDetail } = useProject(projectId);
   const { data: entries = [], isLoading: entriesLoading } = useEntries(projectId);
@@ -314,13 +318,21 @@ export function App() {
   const showDecisions = view === "decisions" || selection?.kind !== "project";
   const lens = selection?.kind === "lens" ? selection.lens : null;
   const title =
-    selection?.kind === "review" ? "Needs Review" : lens ? lens.title : (project?.name ?? "Atlas");
-  const subtitle =
     selection?.kind === "review"
-      ? plural(reviewQueue.length, "unconfirmed entry", "unconfirmed entries")
-      : project
-        ? `${plural(project.counts.active, "active entry", "active entries")} · ${plural(project.sessionCount, "session")}`
-        : "";
+      ? "Needs Review"
+      : selection?.kind === "usage"
+        ? "Usage"
+        : lens
+          ? lens.title
+          : (project?.name ?? "Atlas");
+  const subtitle =
+    selection?.kind === "usage"
+      ? "What Atlas spends on Claude"
+      : selection?.kind === "review"
+        ? plural(reviewQueue.length, "unconfirmed entry", "unconfirmed entries")
+        : project
+          ? `${plural(project.counts.active, "active entry", "active entries")} · ${plural(project.sessionCount, "session")}`
+          : "";
 
   return (
     <NavContext.Provider value={{ openEntry, openNode }}>
@@ -381,14 +393,18 @@ export function App() {
               />
             )}
             <div className="flex-1" data-tauri-drag-region />
-            {mode === "timeline" && !offline && projects?.length !== 0 && showDecisions && (
-              <Segmented
-                label="Filter entries"
-                options={FILTERS}
-                value={filter}
-                onChange={setFilter}
-              />
-            )}
+            {mode === "timeline" &&
+              !offline &&
+              projects?.length !== 0 &&
+              showDecisions &&
+              selection?.kind !== "usage" && (
+                <Segmented
+                  label="Filter entries"
+                  options={FILTERS}
+                  value={filter}
+                  onChange={setFilter}
+                />
+              )}
             <button
               type="button"
               onClick={() => command("search")}
@@ -451,6 +467,8 @@ export function App() {
                   onOpenSettings={() => setSettingsOpen(true)}
                 />
               </div>
+            ) : selection?.kind === "usage" ? (
+              <Usage />
             ) : !showDecisions && projectId ? (
               <Trajectory
                 projectId={projectId}

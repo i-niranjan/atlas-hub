@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { TNode, Track } from "@atlas/core";
 import { z } from "zod";
+import type { UsageSink } from "../usage.ts";
 import type { Doc } from "./docs.ts";
 
 const Quote = z.object({ path: z.string(), quote: z.string() });
@@ -80,11 +81,11 @@ Define any unavoidable project term in primer.terms. reason (on the abandoned tr
 - milestone: the stages, in order (use the documents' own ids as key, e.g. "H2", "M3").
 - story: the work items under a milestone (key = the documents' id, e.g. "CH-014"; parentRef = the milestone's ref).
 For an abandoned track, give its goal and its main milestones or phases (3 to 8, in order) so the map can show what was originally planned; no stories.
-Include every milestone and story the current plan lists; never sample or summarise a backlog. List nodes in the documents' order. Titles: at most 70 characters, specific, no ids repeated in the title.
+Include every milestone and story the current plan lists; never sample or summarise a backlog. List nodes in the documents' order. (Title wording rules are under Wording.)
 
 # Wording: write for someone who has never seen this project
 The person reading the map has no context. Every title must make sense on its own:
-- Titles: plain words, at most 8, saying what the step delivers ("Agent edits code safely in a sandbox"), not internal shorthand ("Isolated coding"). Keep ids in key, never in the title.
+- Titles: plain words, at most 8 words (about 60 characters), saying what the step delivers ("Agent edits code safely in a sandbox"), not internal shorthand ("Isolated coding"). Keep ids in key, never in the title.
 - explain: for the goal and each milestone, one plain sentence (at most 90 characters) on what it means and why it matters. Null for stories.
 - Avoid jargon. When a project-specific word is unavoidable (a component's name, an acronym), keep it and define it in primer.terms.
 
@@ -106,6 +107,8 @@ For every document given, say whether it is the current plan, a superseded plan,
 
 export interface PlanInput {
   projectName: string;
+  /** For cost tracking. */
+  projectId?: string;
   /** Ids the previous attempt left out; the model is asked to include them. */
   missingKeys?: string[];
   docs: Doc[];
@@ -160,9 +163,12 @@ export class AnthropicPlanExtractor implements PlanExtractor {
   private readonly client: Anthropic;
   private readonly model: string;
 
-  constructor(apiKey: string, model: string) {
+  private readonly onUsage: UsageSink | undefined;
+
+  constructor(apiKey: string, model: string, onUsage?: UsageSink) {
     this.client = new Anthropic({ apiKey });
     this.model = model;
+    this.onUsage = onUsage;
   }
 
   async extract(input: PlanInput): Promise<PlanExtraction> {
@@ -175,6 +181,7 @@ export class AnthropicPlanExtractor implements PlanExtractor {
       messages: [{ role: "user", content: renderPlanInput(input) }],
     });
     const message = await stream.finalMessage();
+    this.onUsage?.("roadmap", this.model, message.usage, input.projectId ?? null);
     if (message.stop_reason === "refusal") throw new Error("plan extraction refused");
     if (message.stop_reason === "max_tokens")
       throw new Error("plan extraction truncated (max_tokens)");

@@ -195,7 +195,7 @@ export function buildMcpServer({ store, ingestor, onSaved, trajectory }: McpDeps
     {
       title: "Record a decision",
       description:
-        "Record a decision the user has explicitly made or agreed to. Do not log suggestions, plans or to-dos. Evidence must be the user's own words, copied verbatim.",
+        "Record a decision the user has explicitly made or agreed to. Do not log suggestions, plans or to-dos. Evidence must be the user's own words, copied verbatim. Write the title, summary and rationale for someone with no context on the project: plain words, the reason as the user gave it, and the trade-off only if one was stated (never invent one).",
       inputSchema: {
         project_path: z.string().describe("Absolute path of the project folder"),
         kind: EntryKind.describe(
@@ -207,7 +207,10 @@ export function buildMcpServer({ store, ingestor, onSaved, trajectory }: McpDeps
           .min(1)
           .max(140)
           .describe("One line: what was chosen and the key reason"),
-        rationale: z.string().min(1).describe("The trade-off: what this gains and what it costs"),
+        rationale: z
+          .string()
+          .min(1)
+          .describe("Why, as the user stated it; include the trade-off only if one was stated"),
         alternatives: z.array(z.object({ option: z.string(), whyNot: z.string() })).default([]),
         evidence_quote: z.string().min(4).max(400).describe("The user's words, verbatim"),
         supersedes_id: z.string().optional().describe("Id of the entry this replaces, if any"),

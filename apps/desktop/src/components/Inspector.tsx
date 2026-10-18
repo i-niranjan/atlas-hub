@@ -6,6 +6,7 @@ import { api, type ListedEntry } from "../lib/api.ts";
 import { longDate } from "../lib/format.ts";
 import { keys, useEntry } from "../lib/queries.ts";
 import { ProjectOverview } from "./Blocks.tsx";
+import { PivotExplainer } from "./trajectory/PivotExplainer.tsx";
 import { Alternatives, EntryMeta, EvidenceList, Lineage, SectionTitle } from "./parts.tsx";
 import { Button, KindGlyph, Kbd, SkeletonRows } from "./ui.tsx";
 
@@ -65,6 +66,22 @@ function EntryView({
       </header>
 
       {entry.supersededBy && <SupersededNotice entry={entry} />}
+
+      {entry.change && (
+        <section
+          className="mt-5 rounded-[12px] p-4"
+          style={{ background: "var(--card)", boxShadow: "var(--shadow-card)" }}
+        >
+          <PivotExplainer
+            change={entry.change}
+            showWhy={false}
+            fromName="Before"
+            toName="Now"
+            at={entry.decidedAt}
+            compact
+          />
+        </section>
+      )}
 
       <p className="selectable mt-5 text-[15px] leading-[22px]">{entry.summary}</p>
 

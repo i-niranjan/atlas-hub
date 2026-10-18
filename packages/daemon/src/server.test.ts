@@ -8,6 +8,7 @@ import { Mirror } from "./mirror.ts";
 import { PlanEngine } from "./plan/engine.ts";
 import { TrajectoryStore } from "./plan/store.ts";
 import { createApp } from "./server.ts";
+import { UsageLog } from "./usage.ts";
 import { memoryStore, tempDir } from "./test-helpers.ts";
 
 const TOKEN = "t".repeat(64);
@@ -39,6 +40,7 @@ function app() {
   const a = createApp({
     trajectory,
     engine,
+    usage: new UsageLog(store.db),
     config,
     store,
     bus,
