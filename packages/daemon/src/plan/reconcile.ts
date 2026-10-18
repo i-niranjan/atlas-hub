@@ -43,7 +43,15 @@ function sessionOnlyTrack(data: ReturnType<TrajectoryStore["data"]>) {
 /** Apply a document extraction to a project's trajectory. Only appends events. */
 export function applyPlan(
   x: PlanExtraction,
-  ctx: { store: TrajectoryStore; projectId: string; docs: Doc[]; now: string; source?: NodeSource },
+  ctx: {
+    store: TrajectoryStore;
+    projectId: string;
+    docs: Doc[];
+    now: string;
+    source?: NodeSource;
+    /** Decision ids the model was shown; pivots may cite them as their "why". */
+    entryIds?: Set<string>;
+  },
 ): ApplyResult {
   const { store, projectId, now } = ctx;
   const source = ctx.source ?? "doc";
@@ -236,6 +244,32 @@ export function applyPlan(
         });
         if (reason) store.updateTrack(trackId, { reason });
         result.changed++;
+      }
+    }
+    // The pivot, structured for a newcomer. A "why" stays only if a quote or a recorded decision backs it.
+    if (t.forkedFromRef && t.change) {
+      const c = t.change;
+      const entryIds = c.entryIds.filter((id) => ctx.entryIds?.has(id));
+      const whyBacked = (c.whyEvidence && quoteOk(c.whyEvidence)) || entryIds.length > 0;
+      const clip = (v: string | null, n: number) => (v?.trim() ? v.trim().slice(0, n) : null);
+      store.setTrackChange(trackId, {
+        before: clip(c.before, 120) ?? "",
+        after: clip(c.after, 120) ?? "",
+        why: whyBacked ? clip(c.why, 320) : null,
+        shifts: c.shifts
+          .map((sh) => ({ from: sh.from.trim().slice(0, 40), to: sh.to.trim().slice(0, 40) }))
+          .filter((sh) => sh.from && sh.to)
+          .slice(0, 4),
+        cost: clip(c.cost, 200),
+        entryIds,
+      });
+      if (c.whyEvidence && quoteOk(c.whyEvidence)) {
+        store.addEvidence(trackId, {
+          kind: "doc",
+          ref: c.whyEvidence.path,
+          excerpt: c.whyEvidence.quote,
+          at: now,
+        });
       }
     }
     if (t.status === "abandoned") {

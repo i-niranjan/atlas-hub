@@ -90,6 +90,7 @@ export function Trajectory({
           data={data}
           onClose={() => onSelectNode(null)}
           onSelectNode={(id) => onSelectNode(id)}
+          decisions={decisions}
         />
       )}
     </div>

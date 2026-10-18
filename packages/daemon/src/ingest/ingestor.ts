@@ -116,7 +116,7 @@ export class Ingestor {
   }
 
   private resolveProjectRoot = (root: string): Project | null => {
-    if (!root.startsWith("/") || !isDirectory(root)) return null;
+    if (!root.startsWith("/") || !isDirectory(root) || this.deps.store.isIgnored(root)) return null;
     const project = this.deps.store.upsertProject(resolveProject(root), this.now);
     this.syncAdrs(project);
     return project;
@@ -132,7 +132,10 @@ export class Ingestor {
     if (!cwd) return;
 
     const lastTs = parsed.turns.at(-1)?.timestamp ?? this.now;
-    const project = store.upsertProject(resolveProject(cwd), lastTs);
+    const resolved = resolveProject(cwd);
+    // Folders the user stopped tracking are skipped before anything is stored or sent.
+    if (store.isIgnored(resolved.rootPath) || store.isIgnored(cwd)) return;
+    const project = store.upsertProject(resolved, lastTs);
     this.syncAdrs(project);
     let session = store.upsertSession({
       id: sessionId,

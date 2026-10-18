@@ -44,6 +44,7 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         status: "abandoned",
         reason: "Superseded by the harness plan",
         forkedFromRef: null,
+        change: null,
         evidence: q("archive/cloud.md", "Python FastAPI cloud service"),
       },
       {
@@ -52,6 +53,7 @@ function extraction(over: Partial<PlanExtraction> = {}): PlanExtraction {
         status: "active",
         reason: null,
         forkedFromRef: "cloud",
+        change: null,
         evidence: q("backlog.md", "Coding harness backlog"),
       },
     ],
@@ -245,6 +247,73 @@ describe("missingKeys", () => {
   });
 });
 
+describe("structured pivots", () => {
+  const withChange = (why: string | null, whyQuote: string | null, entryIds: string[]) => {
+    const x = extraction();
+    x.tracks[1] = {
+      ...x.tracks[1]!,
+      change: {
+        before: "Cloud service in Python",
+        after: "Terminal coding tool in TypeScript",
+        why,
+        whyEvidence: whyQuote ? q("archive/cloud.md", whyQuote) : null,
+        shifts: [
+          { from: "Python", to: "TypeScript" },
+          { from: "", to: "dropped empty sides" },
+        ],
+        cost: "Slack trigger postponed",
+        entryIds,
+      },
+    };
+    return x;
+  };
+  const changeOf = (t: TrajectoryStore, projectId: string) =>
+    t.data(projectId).tracks.find((tr) => tr.name === "Coding harness")!.change;
+
+  it("keeps a why backed by a document quote", () => {
+    const { project, t } = setup();
+    applyPlan(withChange("The harness plan replaced it", "Superseded by the harness plan", []), {
+      store: t,
+      projectId: project.id,
+      docs,
+      now: NOW,
+    });
+    const c = changeOf(t, project.id)!;
+    expect(c.why).toBe("The harness plan replaced it");
+    expect(c.shifts).toEqual([{ from: "Python", to: "TypeScript" }]);
+    expect(c.cost).toBe("Slack trigger postponed");
+  });
+
+  it("keeps a why backed by a recorded decision, ignoring unknown ids", () => {
+    const { project, t } = setup();
+    applyPlan(
+      withChange("Owning the agent loop matters more than hosting", null, ["e_real", "e_made_up"]),
+      {
+        store: t,
+        projectId: project.id,
+        docs,
+        now: NOW,
+        entryIds: new Set(["e_real"]),
+      },
+    );
+    const c = changeOf(t, project.id)!;
+    expect(c.why).toBe("Owning the agent loop matters more than hosting");
+    expect(c.entryIds).toEqual(["e_real"]);
+  });
+
+  it("shows 'not recorded' instead of an unbacked why", () => {
+    const { project, t } = setup();
+    applyPlan(withChange("Because the team wanted it", "a quote that is not there", []), {
+      store: t,
+      projectId: project.id,
+      docs,
+      now: NOW,
+    });
+    expect(changeOf(t, project.id)!.why).toBeNull();
+    expect(changeOf(t, project.id)!.before).toBe("Cloud service in Python");
+  });
+});
+
 describe("advances", () => {
   it("only moves forward, except explicit drops and blocks", () => {
     expect(advances("planned", "done")).toBe(true);
@@ -351,6 +420,10 @@ describe("session progress", () => {
           milestoneId: null,
           kind: null,
           reason: null,
+          before: null,
+          after: null,
+          cost: null,
+          shifts: [],
           confidence: 0.9,
           evidence: [{ turnUuid: "u1", quote: "CH-002 is done, tests pass" }],
         },
@@ -361,6 +434,10 @@ describe("session progress", () => {
           milestoneId: null,
           kind: null,
           reason: null,
+          before: null,
+          after: null,
+          cost: null,
+          shifts: [],
           confidence: 0.9,
           evidence: [{ turnUuid: "a1", quote: "CH-003 has started" }],
         },
@@ -371,6 +448,10 @@ describe("session progress", () => {
           milestoneId: id("H0"),
           kind: null,
           reason: null,
+          before: null,
+          after: null,
+          cost: null,
+          shifts: [],
           confidence: 0.9,
           evidence: [{ turnUuid: "u1", quote: "add a retry story" }],
         },
@@ -381,6 +462,10 @@ describe("session progress", () => {
           milestoneId: null,
           kind: null,
           reason: null,
+          before: null,
+          after: null,
+          cost: null,
+          shifts: [],
           confidence: 0.9,
           evidence: [{ turnUuid: "u1", quote: "not in the transcript" }],
         },
@@ -413,6 +498,10 @@ describe("session progress", () => {
           milestoneId: null,
           kind: null,
           reason: "users live in the editor",
+          before: null,
+          after: null,
+          cost: null,
+          shifts: [],
           confidence: 0.95,
           evidence: [{ turnUuid: "u2", quote: "building a VS Code extension instead" }],
         },
@@ -456,6 +545,10 @@ describe("cross-project progress", () => {
       milestoneId: null,
       kind: null,
       reason: null,
+      before: null,
+      after: null,
+      cost: null,
+      shifts: [],
       confidence: 0.9,
       evidence: [{ turnUuid: "u1", quote: "CH-002 is done" }],
     };
@@ -488,7 +581,7 @@ describe("roadmaps started by sessions", () => {
         status: "planned" as const,
         explain: null,
         evidence: [{ turnUuid: "u1", quote: "Phase 1: import bank CSVs" }],
-        stories: [{ title: "Parse CSV", key: null, status: "planned" as const }],
+        stories: ["Parse CSV"],
       },
       {
         title: "Monthly charts",
@@ -598,6 +691,10 @@ describe("roadmaps started by sessions", () => {
       milestoneId: null,
       kind: "milestone" as const,
       reason: null,
+      before: null,
+      after: null,
+      cost: null,
+      shifts: [],
       confidence: 0.9,
       evidence: [{ turnUuid: "u2", quote: "Add a phase 3 for budgets and alerts" }],
     };

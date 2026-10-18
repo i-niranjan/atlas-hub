@@ -17,6 +17,7 @@ const track = (id: string, over: Partial<Track> = {}): Track => ({
   parentTrackId: null,
   forkNodeId: null,
   reason: null,
+  change: null,
   createdAt: "2026-10-01T00:00:00.000Z",
   ...over,
 });

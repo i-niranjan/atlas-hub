@@ -1,3 +1,4 @@
+import type { ProjectSummary } from "@atlas/core";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CircleCheck,
@@ -14,6 +15,7 @@ import { Canvas } from "./components/Canvas.tsx";
 import { Inspector } from "./components/Inspector.tsx";
 import { NavContext } from "./components/parts.tsx";
 import { Settings } from "./components/Settings.tsx";
+import { StopTracking } from "./components/StopTracking.tsx";
 import { Sidebar, type Selection } from "./components/Sidebar.tsx";
 import { Timeline } from "./components/Timeline.tsx";
 import { LinkBanner } from "./components/trajectory/LinkBanner.tsx";
@@ -104,6 +106,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setViewState] = useState<View>(readStoredView);
   const [nodeId, setNodeId] = useState<string | null>(null);
+  const [stopping, setStopping] = useState<ProjectSummary | null>(null);
   const canvas = useCanvas();
   const setView = useCallback((v: View) => {
     setViewState(v);
@@ -335,6 +338,7 @@ export function App() {
             }
             setView(v);
           }}
+          onStopTracking={setStopping}
           onDeleteLens={(id) => deleteLens.mutate(id)}
           onAddProject={() => void addProject()}
           onOpenSettings={() => setSettingsOpen(true)}
@@ -508,6 +512,14 @@ export function App() {
         projectNames={projectNames}
         onAsk={ask}
         onOpenEntry={(e) => openEntry(e.id)}
+      />
+      <StopTracking
+        project={stopping}
+        onClose={() => setStopping(null)}
+        onDone={() => {
+          if (stopping && projectId === stopping.id) setSelection(null);
+          setStopping(null);
+        }}
       />
       <Settings
         open={settingsOpen}

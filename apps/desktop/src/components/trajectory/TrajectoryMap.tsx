@@ -38,14 +38,31 @@ interface Props {
 type View = { x: number; y: number; k: number };
 
 const spring = { type: "spring", stiffness: 420, damping: 32 } as const;
-const MIN_K = 0.6;
-const MAX_K = 2;
+/** Zoom spreads the map out (more room between points); points and text keep their size. */
+const MIN_K = 0.5;
+const MAX_K = 3;
 /** How far the map may be dragged past its edges. */
 const SLACK = 80;
 const MINIMAP_H = 34;
 
 function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+/** The layout stretched horizontally by `k`: semantic zoom. */
+function scaleLane(l: Lane, k: number): Lane {
+  return {
+    ...l,
+    startX: l.startX * k,
+    endX: l.endX * k,
+    forkFrom: l.forkFrom ? { x: l.forkFrom.x * k, y: l.forkFrom.y } : null,
+    stations: l.stations.map((s) => ({
+      ...s,
+      x: s.x * k,
+      endX: s.endX * k,
+      stories: s.stories.map((st) => ({ ...st, x: st.x * k })),
+    })),
+  };
 }
 
 type Hover =
@@ -96,7 +113,7 @@ export function TrajectoryMap({
   const clamp = (v: View): View => {
     const k = Math.min(MAX_K, Math.max(MIN_K, v.k));
     const w = contentW * k;
-    const h = contentH * k;
+    const h = contentH;
     const x =
       w + 2 * SLACK <= size.w
         ? (size.w - w) / 2
@@ -128,7 +145,7 @@ export function TrajectoryMap({
         : focus <= size.w * 0.8
           ? 16
           : size.w * 0.55 - focus;
-    setView({ x, y: (mapHeight - contentH * k) / 2, k });
+    setView({ x, y: (mapHeight - contentH) / 2, k });
   };
   const goToNow = () => {
     if (!nowPoint) return fit();
@@ -148,10 +165,9 @@ export function TrajectoryMap({
       // Trackpad pinch arrives as ctrl+wheel; zoom around the cursor.
       const rect = box.current!.getBoundingClientRect();
       const cx = e.clientX - rect.left;
-      const cy = e.clientY - rect.top;
       setView((v) => {
         const k = Math.min(MAX_K, Math.max(MIN_K, v.k * Math.exp(-e.deltaY * 0.01)));
-        return { k, x: cx - ((cx - v.x) / v.k) * k, y: cy - ((cy - v.y) / v.k) * k };
+        return { k, x: cx - ((cx - v.x) / v.k) * k, y: v.y };
       });
     } else {
       setView((v) => ({
@@ -174,8 +190,7 @@ export function TrajectoryMap({
     setView((v) => {
       const k = Math.min(MAX_K, Math.max(MIN_K, v.k * f));
       const cx = size.w / 2;
-      const cy = mapHeight / 2;
-      return { k, x: cx - ((cx - v.x) / v.k) * k, y: cy - ((cy - v.y) / v.k) * k };
+      return { k, x: cx - ((cx - v.x) / v.k) * k, y: v.y };
     });
 
   // Decisions attach to the station they happened at, as a count badge, not a separate row.
@@ -198,7 +213,8 @@ export function TrajectoryMap({
     return out;
   }, [plan, decisions, at, visible, liveTracks]);
 
-  const toScreen = (x: number, y: number) => ({ x: x * view.k + view.x, y: y * view.k + view.y });
+  const lanes = useMemo(() => plan.lanes.map((l) => scaleLane(l, view.k)), [plan, view.k]);
+  const toScreen = (x: number, y: number) => ({ x: x + view.x, y: y + view.y });
 
   return (
     <div className="relative">
@@ -222,11 +238,13 @@ export function TrajectoryMap({
         aria-label={describe(visibleState, plan.lanes)}
       >
         <svg width={size.w} height={mapHeight} className="block">
-          <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
-            {plan.lanes.map((lane) => (
+          <g transform={`translate(${view.x},${view.y})`}>
+            {lanes.map((lane) => (
               <LaneView
                 key={lane.track.id}
                 lane={lane}
+                zoom={view.k}
+                successor={lanes.find((l) => l.track.parentTrackId === lane.track.id)}
                 live={liveTracks.get(lane.track.id)}
                 visible={visible}
                 selectedId={selectedId ?? null}
@@ -481,6 +499,8 @@ function HoverCard({
 
 function LaneView({
   lane,
+  zoom,
+  successor,
   live,
   visible,
   selectedId,
@@ -490,6 +510,10 @@ function LaneView({
   onHoverDecisions,
 }: {
   lane: Lane;
+  /** Current zoom: more room means more detail in labels. */
+  zoom: number;
+  /** The lane that replaced this one, if any (carries the structured pivot). */
+  successor: Lane | undefined;
   live: { status: string } | undefined;
   visible: Map<string, NodeState>;
   selectedId: string | null;
@@ -513,7 +537,7 @@ function LaneView({
     <motion.g initial={false} animate={{ opacity: shown ? 1 : 0 }} transition={{ duration: 0.35 }}>
       <text
         x={firstX}
-        y={lane.y - 32}
+        y={lane.y - 50}
         fontSize={12}
         fontWeight={650}
         fill={abandoned ? "var(--label-3)" : color}
@@ -579,18 +603,34 @@ function LaneView({
         return (
           <g key={s.node.id}>
             {s.stories.map((st) => (
-              <Dot
-                key={st.node.id}
-                node={visible.get(st.node.id)}
-                base={st.node}
-                x={st.x}
-                y={st.y}
-                r={4.6}
-                color={color}
-                selected={selectedId === st.node.id}
-                onSelect={onSelect}
-                onHover={onHoverNode}
-              />
+              <g key={st.node.id}>
+                <Dot
+                  node={visible.get(st.node.id)}
+                  base={st.node}
+                  x={st.x}
+                  y={st.y}
+                  r={4.6}
+                  color={color}
+                  selected={selectedId === st.node.id}
+                  onSelect={onSelect}
+                  onHover={onHoverNode}
+                />
+                {/* Zoomed in far enough, stories get their own angled labels. */}
+                {zoom >= 1.6 && !abandoned && visible.get(st.node.id) && (
+                  <motion.text
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    x={st.x + 4}
+                    y={st.y - 12}
+                    transform={`rotate(-32 ${st.x + 4} ${st.y - 12})`}
+                    fontSize={10}
+                    fill="var(--label-2)"
+                    pointerEvents="none"
+                  >
+                    {truncate(st.node.title, Math.floor(10 + (zoom - 1.6) * 12))}
+                  </motion.text>
+                )}
+              </g>
             ))}
             <Dot
               node={v}
@@ -618,10 +658,17 @@ function LaneView({
                     {s.node.key}{" "}
                   </tspan>
                 )}
-                {truncate(
-                  s.node.title,
-                  Math.max(6, (abandoned ? 19 : 25) - (s.node.key ? s.node.key.length + 1 : 0)),
-                )}
+                {/* Zoomed out: just the key. Zoomed in: room for the full title. */}
+                {zoom < 0.75 && s.node.key
+                  ? ""
+                  : truncate(
+                      s.node.title,
+                      Math.max(
+                        6,
+                        Math.floor((abandoned ? 19 : 25) * Math.min(zoom, 2.4)) -
+                          (s.node.key ? s.node.key.length + 1 : 0),
+                      ),
+                    )}
               </motion.text>
             )}
             {here && v && (
@@ -661,15 +708,16 @@ function LaneView({
         );
       })}
 
-      {abandoned && lane.track.reason && (
-        <foreignObject x={lane.endX + 14} y={lane.y - 14} width={300} height={46}>
-          <div
-            className="t-caption inline-block max-w-[290px] rounded-[6px] px-2 py-1"
-            style={{ background: "var(--fill)", color: "var(--label-2)", lineHeight: "15px" }}
-            title={lane.track.reason}
-          >
-            {truncate(lane.track.reason, 90)}
-          </div>
+      {abandoned && (successor?.track.change || lane.track.reason) && (
+        <foreignObject x={lane.endX + 14} y={lane.y - 30} width={270} height={66}>
+          <PivotChip
+            lane={lane}
+            successor={successor}
+            onOpen={() => {
+              const pivot = successor?.stations.find((st) => st.node.kind === "pivot");
+              if (pivot) onSelect?.(pivot.node.id);
+            }}
+          />
         </foreignObject>
       )}
 
@@ -704,6 +752,55 @@ function LaneView({
         </g>
       )}
     </motion.g>
+  );
+}
+
+/** At the end of an abandoned line: what changed, as from → to, not a sentence. */
+function PivotChip({
+  lane,
+  successor,
+  onOpen,
+}: {
+  lane: Lane;
+  successor: Lane | undefined;
+  onOpen: () => void;
+}) {
+  const change = successor?.track.change;
+  return (
+    <button
+      type="button"
+      data-node
+      onClick={onOpen}
+      className="block max-w-[260px] rounded-[8px] px-2.5 py-1.5 text-left"
+      style={{ background: "var(--fill)", cursor: "pointer" }}
+      title="See what changed and why"
+    >
+      {change?.shifts.length ? (
+        <ul className="space-y-0.5">
+          {change.shifts.slice(0, 2).map((sh) => (
+            <li
+              key={`${sh.from}>${sh.to}`}
+              className="t-caption flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <span style={{ color: "var(--label-3)", textDecoration: "line-through" }}>
+                {truncate(sh.from, 16)}
+              </span>
+              <span style={{ color: "var(--label-3)" }}>→</span>
+              <span className="font-medium" style={{ color: "var(--label)" }}>
+                {truncate(sh.to, 18)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <span className="t-caption" style={{ color: "var(--label-2)" }}>
+          {truncate(change?.after ?? lane.track.reason ?? "", 80)}
+        </span>
+      )}
+      <span className="t-caption mt-0.5 block font-medium" style={{ color: "var(--accent)" }}>
+        Why it changed ›
+      </span>
+    </button>
   );
 }
 

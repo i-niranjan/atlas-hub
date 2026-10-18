@@ -13,6 +13,7 @@ import {
   SectionTitle,
   useNav,
 } from "./parts.tsx";
+import { PivotExplainer as PivotExplainerView } from "./trajectory/PivotExplainer.tsx";
 import { ScopeChart as ScopeChartView } from "./trajectory/ScopeChart.tsx";
 import { TrajectoryMap as TrajectoryMapView } from "./trajectory/TrajectoryMap.tsx";
 import { KindGlyph, Pill, StatusPill } from "./ui.tsx";
@@ -210,6 +211,25 @@ function BlockView({ block, state }: { block: Block; state: CanvasState }): Reac
             compact
             height={Math.min(320, 120 + data.tracks.length * 92)}
             onSelectNode={openNode}
+          />
+        </Card>
+      );
+    }
+    case "PivotExplainer": {
+      const data = state.trajectories?.[block.projectId];
+      if (!data) return null;
+      const track = block.trackId
+        ? data.tracks.find((t) => t.id === block.trackId)
+        : [...data.tracks].reverse().find((t) => t.change && t.parentTrackId);
+      if (!track?.change) return null;
+      return (
+        <Card>
+          <PivotExplainerView
+            change={track.change}
+            fromName={data.tracks.find((t) => t.id === track.parentTrackId)?.name ?? "Earlier plan"}
+            toName={track.name}
+            at={track.createdAt}
+            decisions={Object.values(state.entries)}
           />
         </Card>
       );

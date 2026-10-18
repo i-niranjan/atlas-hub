@@ -9,8 +9,9 @@ import type { NodeState, TrackState, TrajectoryState } from "@atlas/core";
  * things: nodes only appear, fill or fade in place.
  */
 
-export const LANE_GAP = 92;
-export const TOP = 58;
+/** Room for a lane's label, station labels and the pivot chip without collisions. */
+export const LANE_GAP = 116;
+export const TOP = 74;
 export const LEFT = 36;
 /** Wide enough for a station label (key + ~20 characters) so labels never collide. */
 const STATION_GAP = 112;

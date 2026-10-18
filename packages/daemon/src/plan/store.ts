@@ -1,4 +1,5 @@
 import type {
+  PivotChange,
   Primer,
   TrajectoryEvidence as Evidence,
   NodeKind,
@@ -23,6 +24,7 @@ interface TrackRow {
   parent_track_id: string | null;
   fork_node_id: string | null;
   reason: string | null;
+  change_json: string | null;
   created_at: string;
 }
 
@@ -48,6 +50,7 @@ const toTrack = (r: TrackRow): Track => ({
   parentTrackId: r.parent_track_id,
   forkNodeId: r.fork_node_id,
   reason: r.reason,
+  change: r.change_json ? (JSON.parse(r.change_json) as PivotChange) : null,
   createdAt: r.created_at,
 });
 
@@ -277,6 +280,12 @@ export class TrajectoryStore {
         patch.reason !== undefined ? patch.reason : cur.reason,
         trackId,
       );
+  }
+
+  setTrackChange(trackId: string, change: PivotChange | null): void {
+    this.db
+      .prepare(`UPDATE tracks SET change_json = ? WHERE id = ?`)
+      .run(change ? JSON.stringify(change) : null, trackId);
   }
 
   /** Appends a status event only when it actually changes. */

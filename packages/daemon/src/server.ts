@@ -261,6 +261,35 @@ export function createApp(deps: ServerDeps): Hono {
     return c.json({ ok: true });
   });
 
+  // ── stop / restore tracking ─────────────────────────────
+
+  app.post("/api/projects/:id/ignore", async (c) => {
+    const body = z
+      .object({ deleteData: z.boolean().default(false) })
+      .safeParse(await c.req.json().catch(() => ({})));
+    const id = c.req.param("id");
+    if (!store.getProject(id)) return c.json({ error: "not found" }, 404);
+    const deleteData = body.success ? body.data.deleteData : false;
+    store.ignoreProject(id, deleteData, new Date().toISOString());
+    if (deleteData) deps.trajectory.discardTrajectory(id);
+    bus.emit({ type: "project.changed", projectId: id });
+    bus.emit({ type: "status.changed" });
+    return c.json({ ok: true });
+  });
+
+  app.get("/api/ignored", (c) => c.json(store.listIgnored()));
+
+  app.post("/api/ignored/restore", async (c) => {
+    const body = z
+      .object({ path: z.string().min(1) })
+      .safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: "path required" }, 400);
+    const projectId = store.restoreIgnored(body.data.path);
+    if (projectId) bus.emit({ type: "project.changed", projectId });
+    bus.emit({ type: "status.changed" });
+    return c.json({ ok: true, projectId });
+  });
+
   app.get("/api/link-suggestions", (c) => {
     const out: LinkSuggestion[] = [];
     for (const s of deps.trajectory.suggestions()) {

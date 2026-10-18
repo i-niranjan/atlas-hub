@@ -27,6 +27,12 @@ export const ProgressItem = z.object({
   /** For "added": a whole new milestone (only on session-managed roadmaps) or a story. */
   kind: z.enum(["story", "milestone"]).nullable(),
   reason: z.string().nullable(),
+  /** For "pivot", written for someone with no context: the old plan, the new plan, the cause, what was given up. */
+  before: z.string().nullable(),
+  after: z.string().nullable(),
+  cost: z.string().nullable(),
+  /** For "pivot": concrete differences, each written "old → new". */
+  shifts: z.array(z.string()),
   confidence: z.number(),
   evidence: z.array(z.object({ turnUuid: z.string(), quote: z.string() })),
 });
@@ -48,13 +54,8 @@ export const NewPlan = z.object({
       /** One plain sentence for someone new to the project. */
       explain: z.string().nullable(),
       evidence: z.array(Quote),
-      stories: z.array(
-        z.object({
-          title: z.string(),
-          key: z.string().nullable(),
-          status: z.enum(["planned", "in_progress", "done"]),
-        }),
-      ),
+      /** Task titles under this milestone, in order. */
+      stories: z.array(z.string()),
     }),
   ),
 });

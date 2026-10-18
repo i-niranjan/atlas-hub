@@ -22,6 +22,18 @@ export const PlanExtraction = z.object({
       status: z.enum(["active", "abandoned"]),
       reason: z.string().nullable(),
       forkedFromRef: z.string().nullable(),
+      /** On a track that replaced another (forkedFromRef set): the pivot, structured. */
+      change: z
+        .object({
+          before: z.string(),
+          after: z.string(),
+          why: z.string().nullable(),
+          whyEvidence: Quote.nullable(),
+          shifts: z.array(z.object({ from: z.string(), to: z.string() })),
+          cost: z.string().nullable(),
+          entryIds: z.array(z.string()),
+        })
+        .nullable(),
       evidence: Quote,
     }),
   ),
@@ -50,7 +62,18 @@ export type PlanExtraction = z.infer<typeof PlanExtraction>;
 export const PLAN_SYSTEM = `You read a software project's planning documents and lay out its trajectory: where it is heading, what is planned, what is done, and which earlier plans were abandoned. Atlas draws this as a map, so structure and accuracy matter more than detail.
 
 # Tracks
-A track is one coherent direction for the project. Usually there is one active track. A document marked superseded, archived or "original", or explicitly replaced by another plan, is an abandoned track; give it a reason taken from the documents (for example, which document supersedes it and why) and set forkedFromRef on the track that replaced it to point at the abandoned one. Name tracks with short noun phrases ("Coding harness", "Python cloud platform").
+A track is one coherent direction for the project. Usually there is one active track. A document marked superseded, archived or "original", or explicitly replaced by another plan, is an abandoned track; set forkedFromRef on the track that replaced it to point at the abandoned one. Name tracks with short noun phrases a newcomer understands ("Terminal coding tool", "Python cloud platform").
+
+# Pivots (change, on the track that replaced another)
+A reader with no context must understand the change of direction from these fields alone:
+- before: what the old plan was, in plain words (at most 12 words).
+- after: what the plan is now, in plain words (at most 12 words).
+- why: the cause, meaning the problem with the old approach or the new fact that made it wrong, in one or two plain sentences. Where the change is recorded ("superseded by the master scope", "conflicts with document X") is NOT a reason. Look for the cause in the documents and in <decisions>. If none states it directly, use the replacing plan's own stated principles, goals or priorities that the old plan conflicts with (for example "The new plan puts one reliable agent before a swarm of agents"), quoted in whyEvidence. Set why to null only when neither exists; never guess.
+- whyEvidence: a verbatim quote (4-200 characters) from a document that supports why, or null if the cause comes only from <decisions>.
+- entryIds: ids from <decisions> that record why the direction changed.
+- shifts: 2 to 4 concrete differences as from → to, each side at most 4 words ("Python" → "TypeScript", "Cloud service" → "Local terminal tool").
+- cost: what was given up or postponed, in plain words, or null.
+Define any unavoidable project term in primer.terms. reason (on the abandoned track) is a one-line plain summary of why, or null.
 
 # Nodes
 - goal: one per track, the outcome the track aims for, in a single line.
@@ -88,6 +111,15 @@ export interface PlanInput {
   docs: Doc[];
   tracks: Track[];
   nodes: TNode[];
+  /** The project's recorded decisions (module 1): where the "why" behind a pivot usually lives. */
+  decisions?: {
+    id: string;
+    kind: string;
+    title: string;
+    summary: string;
+    rationale: string;
+    decidedAt: string;
+  }[];
 }
 
 export function renderPlanInput(input: PlanInput): string {
@@ -109,7 +141,15 @@ export function renderPlanInput(input: PlanInput): string {
   const missing = input.missingKeys?.length
     ? `\n\n<completeness note="A previous pass left these ids out. Include every one of them, plus everything else.">${input.missingKeys.join(", ")}</completeness>`
     : "";
-  return `<project>${input.projectName}</project>${missing}\n\n<existing_items>\n${existing}\n</existing_items>\n\n${docs}`;
+  const decisions = input.decisions?.length
+    ? `\n\n<decisions note="recorded from the developer's sessions; cite by id in entryIds">\n${input.decisions
+        .map(
+          (d) =>
+            `- ${d.id} | ${d.kind} | ${d.decidedAt.slice(0, 10)} | ${d.title}: ${d.summary} Why: ${d.rationale}`,
+        )
+        .join("\n")}\n</decisions>`
+    : "";
+  return `<project>${input.projectName}</project>${missing}\n\n<existing_items>\n${existing}\n</existing_items>${decisions}\n\n${docs}`;
 }
 
 export interface PlanExtractor {

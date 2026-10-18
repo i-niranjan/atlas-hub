@@ -20,7 +20,25 @@ export interface Track {
   /** Node on the parent track where this track forks off. */
   forkNodeId: string | null;
   reason: string | null;
+  /** For a track that replaced another: the pivot, structured for someone with no context. */
+  change: PivotChange | null;
   createdAt: string;
+}
+
+/** A change of direction, as facts a newcomer can read at a glance. */
+export interface PivotChange {
+  /** What the old plan was, in plain words. */
+  before: string;
+  /** What the plan is now, in plain words. */
+  after: string;
+  /** The cause; null when nothing recorded states it (never a document reference). */
+  why: string | null;
+  /** The concrete differences, as from → to. */
+  shifts: { from: string; to: string }[];
+  /** What was given up or postponed, if stated. */
+  cost: string | null;
+  /** Decisions (module 1) that record why. */
+  entryIds: string[];
 }
 
 export interface TNode {

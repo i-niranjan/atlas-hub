@@ -1,4 +1,4 @@
-import type { NodeDetail as Detail, TrajectoryData } from "@atlas/core";
+import type { NodeDetail as Detail, Entry, TrajectoryData } from "@atlas/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, FileText, GitCommitVertical, MessageSquareQuote, X } from "lucide-react";
 import { api } from "../../lib/api.ts";
@@ -6,6 +6,7 @@ import { longDate, shortDate } from "../../lib/format.ts";
 import { keys } from "../../lib/queries.ts";
 import { SectionTitle } from "../parts.tsx";
 import { Button, Pill } from "../ui.tsx";
+import { PivotExplainer } from "./PivotExplainer.tsx";
 import { STATUS_LABEL } from "./TrajectoryMap.tsx";
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -28,12 +29,14 @@ export function NodeDetail({
   data,
   onClose,
   onSelectNode,
+  decisions = [],
 }: {
   nodeId: string;
   projectId: string;
   data: TrajectoryData;
   onClose: () => void;
   onSelectNode: (id: string) => void;
+  decisions?: Entry[];
 }) {
   const client = useQueryClient();
   const { data: d } = useQuery({ queryKey: ["node", nodeId], queryFn: () => api.node(nodeId) });
@@ -135,7 +138,20 @@ export function NodeDetail({
         </div>
       )}
 
-      {d.track?.reason && d.node.kind === "pivot" && (
+      {d.node.kind === "pivot" && d.track?.change && (
+        <section className="px-5 pt-5">
+          <PivotExplainer
+            change={d.track.change}
+            fromName={
+              data.tracks.find((t) => t.id === d.track!.parentTrackId)?.name ?? "Earlier plan"
+            }
+            toName={d.track.name}
+            at={d.track.createdAt}
+            decisions={decisions}
+          />
+        </section>
+      )}
+      {d.node.kind === "pivot" && !d.track?.change && d.track?.reason && (
         <section className="px-5 pt-5">
           <SectionTitle>Why the direction changed</SectionTitle>
           <p className="t-body selectable">{d.track.reason}</p>

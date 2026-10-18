@@ -8,7 +8,7 @@ import { Store } from "./store.ts";
 export const NOW = "2026-10-17T15:00:00.000Z";
 
 export function memoryStore(): Store {
-  return new Store(openDb(":memory:"));
+  return new Store(openDb(":memory:"), { ignoreThrowaway: false });
 }
 
 export function tempDir(prefix = "atlas-test-"): string {

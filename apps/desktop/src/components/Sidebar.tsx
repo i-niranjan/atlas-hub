@@ -1,6 +1,13 @@
 import type { Lens, ProjectSummary, StatusReport } from "@atlas/core";
 import { Folder, Inbox, Layers, Plus, Settings, Signpost, Waypoints, X } from "lucide-react";
+import { ContextMenu } from "radix-ui";
 import type { ReactNode } from "react";
+import { isTauri } from "../lib/api.ts";
+
+async function revealInFinder(path: string): Promise<void> {
+  const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+  await revealItemInDir(path);
+}
 import type { LiveState } from "../lib/queries.ts";
 
 export type Selection =
@@ -17,6 +24,7 @@ interface Props {
   /** Which view of the selected project is showing. */
   view: "decisions" | "trajectory" | null;
   onSelectView: (projectId: string, view: "decisions" | "trajectory") => void;
+  onStopTracking: (project: ProjectSummary) => void;
   onDeleteLens: (id: string) => void;
   onAddProject: () => void;
   onOpenSettings: () => void;
@@ -128,23 +136,50 @@ export function Sidebar(props: Props) {
             selection?.kind === "project" && selection.projectId === p.id && props.view === null;
           return (
             <div key={p.id}>
-              <Row
-                selected={isSelected}
-                icon={<Folder size={16} strokeWidth={1.8} />}
-                label={p.name}
-                badge={p.counts.total}
-                indicator={
-                  active ? (
-                    <span
-                      className="pulse h-1.5 w-1.5 rounded-full"
-                      style={{ background: "var(--green)" }}
-                      title="A session ended in the last 15 minutes"
-                      aria-label="Recently active"
+              <ContextMenu.Root>
+                <ContextMenu.Trigger asChild>
+                  <div>
+                    <Row
+                      selected={isSelected}
+                      icon={<Folder size={16} strokeWidth={1.8} />}
+                      label={p.name}
+                      badge={p.counts.total}
+                      indicator={
+                        active ? (
+                          <span
+                            className="pulse h-1.5 w-1.5 rounded-full"
+                            style={{ background: "var(--green)" }}
+                            title="A session ended in the last 15 minutes"
+                            aria-label="Recently active"
+                          />
+                        ) : null
+                      }
+                      onClick={() => props.onSelect({ kind: "project", projectId: p.id })}
                     />
-                  ) : null
-                }
-                onClick={() => props.onSelect({ kind: "project", projectId: p.id })}
-              />
+                  </div>
+                </ContextMenu.Trigger>
+                <ContextMenu.Portal>
+                  <ContextMenu.Content
+                    className="z-50 min-w-[190px] rounded-[8px] p-1"
+                    style={{ background: "var(--elevated)", boxShadow: "var(--shadow-pop)" }}
+                  >
+                    {isTauri && (
+                      <ContextMenu.Item
+                        className="t-body flex h-[24px] items-center rounded-[5px] px-2.5 outline-none data-[highlighted]:bg-[var(--accent)] data-[highlighted]:text-[var(--accent-text)]"
+                        onSelect={() => void revealInFinder(p.rootPath)}
+                      >
+                        Show in Finder
+                      </ContextMenu.Item>
+                    )}
+                    <ContextMenu.Item
+                      className="t-body flex h-[24px] items-center rounded-[5px] px-2.5 outline-none data-[highlighted]:bg-[var(--accent)] data-[highlighted]:text-[var(--accent-text)]"
+                      onSelect={() => props.onStopTracking(p)}
+                    >
+                      Stop Tracking…
+                    </ContextMenu.Item>
+                  </ContextMenu.Content>
+                </ContextMenu.Portal>
+              </ContextMenu.Root>
               {selectedProject === p.id && (
                 <>
                   <Row

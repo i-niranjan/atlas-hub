@@ -1,6 +1,7 @@
+import { openDb } from "./db.ts";
 import type { Entry } from "@atlas/core";
 import { describe, expect, it } from "vitest";
-import { ftsQuery } from "./store.ts";
+import { ftsQuery, Store } from "./store.ts";
 import { memoryStore, NOW, seedProject } from "./test-helpers.ts";
 
 const entry = (id: string, projectId: string, over: Partial<Entry> = {}): Entry => ({
@@ -67,6 +68,40 @@ describe("Store", () => {
     for (const id of ["a", "b", "c"])
       expect(s.lineage(id).map((e) => e.id)).toEqual(["a", "b", "c"]);
     expect(s.entryDetail("b")!.supersededBy?.id).toBe("c");
+  });
+
+  it("stops tracking a project's folders, hides it, and can restore it", () => {
+    const s = memoryStore();
+    const p = seedProject(s, "/w/noise", "noise");
+    s.saveEntry(entry("e1", p.id), "extracted");
+    s.ignoreProject(p.id, false, NOW);
+    expect(s.listProjects()).toEqual([]);
+    expect(s.isIgnored("/w/noise")).toBe(true);
+    expect(s.isIgnored("/w/noise/sub/dir")).toBe(true);
+    expect(s.isIgnored("/w/noisemaker")).toBe(false);
+    expect(s.getEntry("e1")).not.toBeNull();
+    expect(s.restoreIgnored("/w/noise")).toBe(p.id);
+    expect(s.listProjects().map((x) => x.id)).toEqual([p.id]);
+    expect(s.isIgnored("/w/noise")).toBe(false);
+  });
+
+  it("always ignores temp folders and app scratch workspaces", () => {
+    const s = new Store(openDb(":memory:"));
+    expect(s.isIgnored("/private/tmp/x")).toBe(true);
+    expect(s.isIgnored("/tmp")).toBe(true);
+    expect(s.isIgnored("/var/folders/ab/T/y")).toBe(true);
+    expect(s.isIgnored("/Users/me/Library/Application Support/Claude/scratch-workspaces/a")).toBe(
+      true,
+    );
+    expect(s.isIgnored("/Users/me/WORK/app")).toBe(false);
+  });
+
+  it("can delete a project's data when it stops being tracked", () => {
+    const s = memoryStore();
+    const p = seedProject(s, "/w/noise", "noise");
+    s.saveEntry(entry("e1", p.id), "extracted");
+    s.ignoreProject(p.id, true, NOW);
+    expect(s.getEntry("e1")).toBeNull();
   });
 
   it("sanitises free text into a safe FTS query", () => {

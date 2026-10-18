@@ -130,5 +130,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ codeId, docsId }),
     }),
+  ignoreProject: (id: string, deleteData: boolean) =>
+    request<{ ok: true }>(`/api/projects/${id}/ignore`, {
+      method: "POST",
+      body: JSON.stringify({ deleteData }),
+    }),
+  ignored: () =>
+    request<
+      { path: string; projectId: string | null; projectName: string | null; ignoredAt: string }[]
+    >("/api/ignored"),
+  restoreIgnored: (path: string) =>
+    request<{ ok: true; projectId: string | null }>("/api/ignored/restore", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
   deleteLens: (id: string) => request<{ ok: true }>(`/api/lenses/${id}`, { method: "DELETE" }),
 };

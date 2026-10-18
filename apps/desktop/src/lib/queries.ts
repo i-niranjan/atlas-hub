@@ -12,6 +12,7 @@ export const keys = {
   review: ["review"] as const,
   trajectory: (projectId: string) => ["trajectory", projectId] as const,
   links: ["links"] as const,
+  ignored: ["ignored"] as const,
 };
 
 export const useStatus = () => useQuery({ queryKey: keys.status, queryFn: api.status });
@@ -84,6 +85,7 @@ export function useLiveUpdates(): { state: LiveState; fresh: Set<string> } {
             break;
           case "status.changed":
             void client.invalidateQueries({ queryKey: keys.status });
+            void client.invalidateQueries({ queryKey: keys.ignored });
             void client.invalidateQueries({ queryKey: keys.links });
             break;
         }

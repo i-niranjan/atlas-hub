@@ -171,6 +171,16 @@ const MIGRATIONS: string[] = [
     updated_at TEXT NOT NULL
   );
   `,
+  // 4 · Structured pivots, and folders Atlas has been told to stop tracking.
+  `
+  ALTER TABLE tracks ADD COLUMN change_json TEXT;
+  ALTER TABLE projects ADD COLUMN hidden_at TEXT;
+  CREATE TABLE ignored_roots (
+    path       TEXT PRIMARY KEY,
+    project_id TEXT,
+    ignored_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function openDb(path: string): DB {

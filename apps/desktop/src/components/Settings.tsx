@@ -1,9 +1,10 @@
 import type { StatusReport } from "@atlas/core";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, CircleDashed, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { api, ApiError } from "../lib/api.ts";
+import { tildify } from "../lib/format.ts";
 import { keys, type LiveState } from "../lib/queries.ts";
 import { Button } from "./ui.tsx";
 
@@ -85,6 +86,8 @@ export function Settings({
               </div>
             )}
           </section>
+
+          <IgnoredFolders />
 
           {status && status.queue.errors > 0 && (
             <p className="t-callout mt-4" style={{ color: "var(--orange)" }}>
@@ -218,6 +221,50 @@ function ApiKeySection({ hasKey, waiting }: { hasKey: boolean; waiting: number }
           </p>
         </form>
       )}
+    </section>
+  );
+}
+
+/** Folders Atlas stopped tracking; restoring brings the project (and any kept data) back. */
+function IgnoredFolders() {
+  const client = useQueryClient();
+  const { data = [] } = useQuery({ queryKey: keys.ignored, queryFn: api.ignored });
+  const restore = useMutation({
+    mutationFn: api.restoreIgnored,
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.ignored });
+      void client.invalidateQueries({ queryKey: keys.projects });
+    },
+  });
+  if (!data.length) return null;
+  return (
+    <section className="mt-6">
+      <h3 className="t-section mb-2">Not tracked</h3>
+      <ul className="rounded-[10px]" style={{ background: "var(--fill)" }}>
+        {data.map((f, i) => (
+          <li
+            key={f.path}
+            className="flex items-center gap-3 px-3.5 py-2"
+            style={{
+              borderBottom: i === data.length - 1 ? undefined : "0.5px solid var(--separator)",
+            }}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="t-body truncate">{f.projectName ?? f.path.split("/").at(-1)}</div>
+              <div className="t-caption truncate font-mono" style={{ color: "var(--label-3)" }}>
+                {tildify(f.path)}
+              </div>
+            </div>
+            <Button
+              size="small"
+              onClick={() => restore.mutate(f.path)}
+              disabled={restore.isPending}
+            >
+              Track Again
+            </Button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

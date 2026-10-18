@@ -194,6 +194,20 @@ export function applyProgress(
         at,
         status: "done",
       });
+      if (item.before || item.after || item.shifts.length) {
+        store.setTrackChange(trackId, {
+          before: item.before?.trim().slice(0, 120) ?? "",
+          after: item.after?.trim().slice(0, 120) ?? item.title.trim().slice(0, 120),
+          why: item.reason?.trim().slice(0, 320) || null,
+          shifts: item.shifts
+            .map((sh) => sh.split(/\s*(?:→|->)\s*/))
+            .filter((parts) => parts.length === 2 && parts[0] && parts[1])
+            .map(([from, to]) => ({ from: from!.trim().slice(0, 40), to: to!.trim().slice(0, 40) }))
+            .slice(0, 4),
+          cost: item.cost?.trim().slice(0, 200) || null,
+          entryIds: [],
+        });
+      }
       cite(pivotId);
       cite(trackId);
       changed.add(projectId);
@@ -271,20 +285,20 @@ export function applySessionPlan(
       status: m.status,
     });
     cite(mid, m.verified);
-    for (const st of m.stories) {
-      if (!st.title.trim()) continue;
+    for (const title of m.stories) {
+      if (!title.trim()) continue;
       store.createNode({
         projectId,
         trackId,
         kind: "story",
-        key: st.key?.trim() || null,
-        title: st.title.trim().slice(0, 120),
+        key: null,
+        title: title.trim().slice(0, 120),
         parentId: mid,
         sort: sort++,
         reviewState: review,
         source: "session",
         at: mAt,
-        status: st.status,
+        status: "planned",
       });
     }
   }

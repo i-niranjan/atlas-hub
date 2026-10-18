@@ -88,6 +88,16 @@ describe("Ingestor", () => {
     expect(t.fake.calls).toHaveLength(1);
   });
 
+  it("skips folders the user stopped tracking, before any model call", async () => {
+    const t = setup(true);
+    await t.ingestor.enqueue(t.transcript);
+    const project = t.store.findProject(t.projectDir)!;
+    t.store.ignoreProject(project.id, false, "2026-10-18T00:00:00.000Z");
+    appendFileSync(t.transcript, t.withCwd(line.user("Let's use SQLite again")) + "\n");
+    await t.ingestor.enqueue(t.transcript);
+    expect(t.fake.calls).toHaveLength(1);
+  });
+
   it("parks sessions until an API key exists", async () => {
     const t = setup(false);
     await t.ingestor.enqueue(t.transcript);

@@ -60,6 +60,13 @@ interface SessionRow {
   last_processed_at: string | null;
 }
 
+/** Temp folders and app scratch workspaces: sessions there are never projects. */
+const THROWAWAY = [
+  /^\/(private\/)?tmp(\/|$)/,
+  /^\/(private\/)?var\/folders\//,
+  /^\/Users\/[^/]+\/Library\//,
+];
+
 export function newEntryId(): string {
   return `e_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
 }
@@ -108,8 +115,12 @@ export function ftsQuery(text: string): string | null {
 export class Store {
   readonly db: DB;
 
-  constructor(db: DB) {
+  /** Skip temp folders and app scratch workspaces (on in the daemon; tests use temp folders). */
+  private readonly ignoreThrowaway: boolean;
+
+  constructor(db: DB, opts: { ignoreThrowaway?: boolean } = {}) {
     this.db = db;
+    this.ignoreThrowaway = opts.ignoreThrowaway ?? true;
   }
 
   // ── projects ──────────────────────────────────────────────
@@ -146,6 +157,86 @@ export class Store {
       )
       .run(p.rootPath, id, at);
     return this.getProjectByPath(p.rootPath)!;
+  }
+
+  // ── folders Atlas was told to stop tracking ───────────────
+
+  /** True if `path` is an ignored folder or inside one. Throwaway locations are always ignored. */
+  isIgnored(path: string): boolean {
+    if (this.ignoreThrowaway && THROWAWAY.some((re) => re.test(path))) return true;
+    const rows = this.db.prepare(`SELECT path FROM ignored_roots`).all() as { path: string }[];
+    return rows.some((r) => path === r.path || path.startsWith(`${r.path}/`));
+  }
+
+  /**
+   * Stop tracking a project: its folders join the ignore list (future sessions there are
+   * skipped before any model call) and it leaves the sidebar. Data is kept unless asked.
+   */
+  ignoreProject(projectId: string, deleteData: boolean, at: string): void {
+    this.db.transaction(() => {
+      for (const r of this.rootsOf(projectId)) {
+        this.db
+          .prepare(
+            `INSERT OR REPLACE INTO ignored_roots (path, project_id, ignored_at) VALUES (?, ?, ?)`,
+          )
+          .run(r.path, projectId, at);
+      }
+      this.db.prepare(`UPDATE projects SET hidden_at = ? WHERE id = ?`).run(at, projectId);
+      if (deleteData) {
+        this.db
+          .prepare(
+            `DELETE FROM evidence WHERE entry_id IN (SELECT id FROM entries WHERE project_id = ?)`,
+          )
+          .run(projectId);
+        this.db.prepare(`DELETE FROM entries WHERE project_id = ?`).run(projectId);
+        this.db.prepare(`DELETE FROM sessions WHERE project_id = ?`).run(projectId);
+        this.db.prepare(`DELETE FROM lenses WHERE project_id = ?`).run(projectId);
+      }
+    })();
+  }
+
+  listIgnored(): {
+    path: string;
+    projectId: string | null;
+    projectName: string | null;
+    ignoredAt: string;
+  }[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT i.path, i.project_id, p.name, i.ignored_at FROM ignored_roots i
+           LEFT JOIN projects p ON p.id = i.project_id ORDER BY i.ignored_at DESC`,
+        )
+        .all() as {
+        path: string;
+        project_id: string | null;
+        name: string | null;
+        ignored_at: string;
+      }[]
+    ).map((r) => ({
+      path: r.path,
+      projectId: r.project_id,
+      projectName: r.name,
+      ignoredAt: r.ignored_at,
+    }));
+  }
+
+  /** Track an ignored folder again; its project (and any kept data) comes back. */
+  restoreIgnored(path: string): string | null {
+    const row = this.db.prepare(`SELECT project_id FROM ignored_roots WHERE path = ?`).get(path) as
+      { project_id: string | null } | undefined;
+    if (!row) return null;
+    this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM ignored_roots WHERE path = ?`).run(path);
+      if (row.project_id) {
+        const stillIgnored = this.db
+          .prepare(`SELECT 1 FROM ignored_roots WHERE project_id = ?`)
+          .get(row.project_id);
+        if (!stillIgnored)
+          this.db.prepare(`UPDATE projects SET hidden_at = NULL WHERE id = ?`).run(row.project_id);
+      }
+    })();
+    return row.project_id;
   }
 
   projectForRoot(path: string): Project | null {
@@ -229,7 +320,7 @@ export class Store {
            (SELECT COUNT(*) FROM sessions s WHERE s.project_id = p.id
              OR s.id IN (SELECT ev.session_id FROM evidence ev JOIN entries e ON e.id = ev.entry_id WHERE e.project_id = p.id)
            ) AS session_count
-         FROM projects p ORDER BY p.last_active DESC`,
+         FROM projects p WHERE p.hidden_at IS NULL ORDER BY p.last_active DESC`,
       )
       .all() as (ProjectRow & {
       active: number;

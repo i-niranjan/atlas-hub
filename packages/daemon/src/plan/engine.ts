@@ -86,7 +86,22 @@ export class PlanEngine {
     if (!extractor) return;
     const data = trajectory.data(projectId);
     this.log(`trajectory: reading ${docs.length} docs for ${project.name}`);
-    const input = { projectName: project.name, docs, tracks: data.tracks, nodes: data.nodes };
+    // Recorded decisions are where the "why" behind a change of direction usually lives.
+    const decisions = store.listEntries({ projectId, limit: 60 }).map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      title: e.title,
+      summary: e.summary,
+      rationale: e.rationale.slice(0, 300),
+      decidedAt: e.decidedAt,
+    }));
+    const input = {
+      projectName: project.name,
+      docs,
+      tracks: data.tracks,
+      nodes: data.nodes,
+      decisions,
+    };
     let extraction = await extractor.extract(input);
     // Long backlogs sometimes come back abbreviated; ask once more for what's missing.
     const missing = missingKeys(docs, extraction);
@@ -98,7 +113,13 @@ export class PlanEngine {
       if (retry.nodes.length >= extraction.nodes.length) extraction = retry;
     }
     const res = store.db.transaction(() =>
-      applyPlan(extraction, { store: trajectory, projectId, docs, now: this.now }),
+      applyPlan(extraction, {
+        store: trajectory,
+        projectId,
+        docs,
+        now: this.now,
+        entryIds: new Set(decisions.map((d) => d.id)),
+      }),
     )();
     trajectory.setDocHash(projectId, hash, this.now);
     for (const r of res.rejected.slice(0, 10))

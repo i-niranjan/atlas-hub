@@ -88,6 +88,14 @@ const TrajectoryMap = z.object({
   to: z.iso.date().optional(),
 });
 
+/** Module 2: a change of direction as Before → After, the shifts, why and what it cost. */
+const PivotExplainer = z.object({
+  type: z.literal("PivotExplainer"),
+  projectId: z.string().min(1),
+  /** The track that replaced another; omitted means the most recent pivot. */
+  trackId: z.string().min(1).optional(),
+});
+
 const ScopeChart = z.object({
   type: z.literal("ScopeChart"),
   projectId: z.string().min(1),
@@ -97,6 +105,7 @@ export type Block =
   | z.infer<typeof DecisionCard>
   | z.infer<typeof TrajectoryMap>
   | z.infer<typeof ScopeChart>
+  | z.infer<typeof PivotExplainer>
   | z.infer<typeof EntryList>
   | z.infer<typeof PivotLineage>
   | z.infer<typeof ArchitectureDiagram>
@@ -122,6 +131,7 @@ export const Block: z.ZodType<Block> = z.lazy(() =>
     KeyValue,
     TrajectoryMap,
     ScopeChart,
+    PivotExplainer,
     z.object({
       type: z.literal("Section"),
       title: z.string().min(1).max(80),
@@ -143,6 +153,7 @@ export const BLOCK_TYPES = [
   "KeyValue",
   "TrajectoryMap",
   "ScopeChart",
+  "PivotExplainer",
   "Section",
 ] as const;
 

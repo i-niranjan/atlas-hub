@@ -59,7 +59,7 @@ If the new turns contain no decisions, return an empty list. That is the common 
 <trajectory> lists the project's planned goal, milestones and stories with ids and status. Report movement on it that the new turns show:
 - started / done / dropped / blocked: an existing node (nodeId) whose work clearly began, was finished (implemented and verified, not merely discussed), was cut from scope, or is blocked.
 - added: new work the developer brought into scope (title; milestoneId when it clearly belongs to one; kind "story"). On a roadmap marked managed_by="sessions" you may also add a whole new phase with kind "milestone".
-- pivot: the developer changed the project's direction so the current plan no longer applies (title = the new direction, reason = why). Rare; only for explicit decisions.
+- pivot: the developer changed the project's direction so the current plan no longer applies. Rare; only for explicit decisions. title = the new direction; before = the old plan in plain words; after = the new plan in plain words; reason = the cause as the turns state it (the problem with the old approach or the new fact), or null if not stated; shifts = 2-4 concrete differences, each written "old → new" with at most 4 words a side; cost = what was given up or postponed, or null. For other actions leave before/after/cost null and shifts empty. Write for someone with no context on the project; a reference to a document or "the plan changed" is not a why.
 Same evidence rules as entries. Do not report planning talk as progress. Empty is the common case.
 
 # Starting a roadmap (only when <no_roadmap> is given; otherwise newPlan is null)

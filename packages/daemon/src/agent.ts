@@ -36,7 +36,7 @@ Composing the view:
 - PivotLineage for "how did X evolve / why did we change". DecisionCard for one key decision. EntryList for several related ones. OpenQuestions for unresolved questions.
 - ArchitectureDiagram only when architecture entries describe components and how they connect. Build the Mermaid flowchart strictly from those entries and list them in sourceEntryIds. Use graph TD unless the flow is a simple chain of four nodes or fewer; keep node labels to two or three words and edge labels to one or two. Put caveats about the diagram in its caption, not in your reply.
 - OptionsCompare only when an entry's recorded alternatives support it; set sourceEntryId.
-- TrajectoryMap for "where are we heading / what's the plan / how far along"; ScopeChart for "how did scope change". Use get_trajectory first to know what's there.
+- TrajectoryMap for "where are we heading / what's the plan / how far along"; ScopeChart for "how did scope change"; PivotExplainer for "why did the direction change". Use get_trajectory first to know what's there.
 - Section groups related blocks under a heading. Callout (info) for a short note, e.g. that something is not recorded.
 - Prefer 1-4 blocks. Lead with the most direct answer.
 - Say each thing once. Your reply sentences already sit above the view, so never add a Callout or Markdown block that restates them.
@@ -116,6 +116,7 @@ Shapes:
 - {type:"KeyValue", items:[{label, value}]}
 - {type:"TrajectoryMap", projectId, from?:"yyyy-mm-dd", to?:"yyyy-mm-dd"}: the live roadmap map with pivots
 - {type:"ScopeChart", projectId}: planned-work size over time
+- {type:"PivotExplainer", projectId, trackId?}: a change of direction as before → after, what shifted, why, and what it cost
 - {type:"Section", title, blocks:[...]}`,
     input_schema: {
       type: "object",
@@ -233,7 +234,10 @@ export function resolveView(
   if (!blocks.length) return { error: `every block was invalid: ${dropped.join("; ")}` };
   const trajectories: Record<string, TrajectoryData> = {};
   const visitT = (b: Block): void => {
-    if ((b.type === "TrajectoryMap" || b.type === "ScopeChart") && trajectory) {
+    if (
+      (b.type === "TrajectoryMap" || b.type === "ScopeChart" || b.type === "PivotExplainer") &&
+      trajectory
+    ) {
       trajectories[b.projectId] ??= trajectory.data(b.projectId);
       const p = all.find((x) => x.id === b.projectId);
       if (p) projects[p.id] = p;
@@ -286,6 +290,8 @@ function runTool(store: Store, name: string, input: unknown, trajectory?: Trajec
         })),
         abandoned: h.abandoned.map((t) => ({ name: t.name, reason: t.reason })),
         tracks: state.tracks.map((t) => ({
+          id: t.id,
+          change: t.change,
           name: t.name,
           status: t.status,
           since: t.createdAt.slice(0, 10),
